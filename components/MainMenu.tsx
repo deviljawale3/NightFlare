@@ -18,7 +18,7 @@ const MainMenu: React.FC = () => {
 
         {/* Main Logo Section */}
         <div className="mb-6 sm:mb-14 text-center w-full px-4">
-          <h1 className="text-[14vw] sm:text-8xl font-black text-white tracking-tighter italic leading-none select-none drop-shadow-[0_10px_60px_rgba(255,107,0,0.8)]">
+          <h1 className="text-[10vw] sm:text-6xl font-black text-white tracking-tighter italic leading-none select-none drop-shadow-[0_10px_60px_rgba(255,107,0,0.8)]">
             NIGHT<span className="text-[#ff6b00]">FLARE</span>
           </h1>
           <p className="text-white mt-2 font-black tracking-[0.5em] text-[10px] sm:text-[12px] uppercase drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] opacity-90">
