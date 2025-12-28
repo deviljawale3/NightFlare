@@ -25,7 +25,13 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ onBack }) => {
                         <div className="text-purple-500 font-black text-xs tracking-[0.3em] uppercase mb-2">Performance Metrics</div>
                         <h2 className="text-4xl font-black text-white italic uppercase tracking-tighter">Strategic Analytics</h2>
                     </div>
-                    <button onClick={onBack} className="w-12 h-12 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all">✕</button>
+                    <button
+                        onClick={onBack}
+                        className="w-12 h-12 rounded-full bg-white/5 hover:bg-red-600 flex items-center justify-center text-white/70 hover:text-white transition-all border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+                        aria-label="Close"
+                    >
+                        <span className="text-xl font-bold">✕</span>
+                    </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
@@ -159,7 +165,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ onBack }) => {
                                             <div
                                                 key={i}
                                                 className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${f === 'W' ? 'bg-green-500/20 text-green-500' :
-                                                        f === 'L' ? 'bg-red-500/20 text-red-500' : 'bg-white/10 text-white/50'
+                                                    f === 'L' ? 'bg-red-500/20 text-red-500' : 'bg-white/10 text-white/50'
                                                     }`}
                                             >
                                                 {f}

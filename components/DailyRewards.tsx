@@ -168,9 +168,10 @@ export const DailyRewardModal: React.FC = () => {
                 {/* Close button */}
                 <button
                     onClick={handleClose}
-                    className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition-all z-10"
+                    className="absolute top-4 right-4 sm:top-6 sm:right-6 w-12 h-12 rounded-full bg-white/10 hover:bg-red-600 flex items-center justify-center text-white/70 hover:text-white transition-all z-50 border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+                    aria-label="Close"
                 >
-                    ✕
+                    <span className="text-xl font-bold">✕</span>
                 </button>
 
                 {/* Header */}
@@ -207,10 +208,10 @@ export const DailyRewardModal: React.FC = () => {
                             <div
                                 key={reward.day}
                                 className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-center p-2 transition-all relative ${isToday && !isClaimed
-                                        ? 'bg-gradient-to-br from-orange-600 to-red-600 border-yellow-400 shadow-[0_0_30px_rgba(251,146,60,0.6)] scale-110 animate-pulse'
-                                        : isClaimed
-                                            ? 'bg-green-900/30 border-green-500/30'
-                                            : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                    ? 'bg-gradient-to-br from-orange-600 to-red-600 border-yellow-400 shadow-[0_0_30px_rgba(251,146,60,0.6)] scale-110 animate-pulse'
+                                    : isClaimed
+                                        ? 'bg-green-900/30 border-green-500/30'
+                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
                                     }`}
                             >
                                 {/* Day number */}
@@ -283,8 +284,8 @@ export const DailyRewardModal: React.FC = () => {
                 )}
 
                 {/* Footer */}
-                <div className="mt-6 flex justify-center opacity-30 relative z-10">
-                    <DeeJayLabsLogo className="scale-75" />
+                <div className="mt-6 flex justify-center opacity-30 relative z-10 scale-75">
+                    <DeeJayLabsLogo />
                 </div>
             </div>
         </div>

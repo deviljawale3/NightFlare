@@ -3,11 +3,11 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store';
 import { GameState } from '../types';
 import DeeJayLabsLogo from './DeeJayLabsLogo';
-import SettingsPanel from './SettingsPanel';
+import SettingsPanel, { useSettingsStore } from './SettingsPanel';
 
 const PauseMenu: React.FC = () => {
   const { setGameState } = useGameStore();
-  const [showSettings, setShowSettings] = useState(false);
+  const settings = useSettingsStore();
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-md z-[120] pointer-events-auto p-6">
@@ -29,7 +29,7 @@ const PauseMenu: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setShowSettings(true)}
+            onClick={() => settings.setIsOpen(true)}
             className="w-full bg-white/5 text-white/80 py-4 rounded-2xl font-black text-base border border-white/10 hover:bg-white/10 transition-all uppercase italic tracking-tight"
           >
             SETTINGS
@@ -43,12 +43,10 @@ const PauseMenu: React.FC = () => {
           </button>
         </div>
 
-        <div className="opacity-60 hover:opacity-100 transition-opacity">
-          <DeeJayLabsLogo className="scale-110" />
+        <div className="opacity-60 hover:opacity-100 transition-opacity scale-110">
+          <DeeJayLabsLogo />
         </div>
       </div>
-
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
     </div>
   );
 };

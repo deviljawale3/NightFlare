@@ -24,6 +24,7 @@ interface SettingsState {
     sensitivity: number;
     autoAim: boolean;
     controlLayout: 'A' | 'B' | 'C';
+    movementMode: 'joystick' | 'touch';
 
     // Accessibility
     colorblindMode: 'none' | 'protanopia' | 'deuteranopia' | 'tritanopia';
@@ -35,6 +36,9 @@ interface SettingsState {
     difficulty: 'easy' | 'normal' | 'hard';
     autoSave: boolean;
     tutorialHints: boolean;
+
+    // UI State
+    isOpen: boolean;
 
     // Actions
     setQuality: (quality: SettingsState['quality']) => void;
@@ -50,6 +54,7 @@ interface SettingsState {
     setSensitivity: (sensitivity: number) => void;
     setAutoAim: (enabled: boolean) => void;
     setControlLayout: (layout: SettingsState['controlLayout']) => void;
+    setMovementMode: (mode: SettingsState['movementMode']) => void;
     setColorblindMode: (mode: SettingsState['colorblindMode']) => void;
     setReducedMotion: (enabled: boolean) => void;
     setTextSize: (size: SettingsState['textSize']) => void;
@@ -57,6 +62,11 @@ interface SettingsState {
     setDifficulty: (difficulty: SettingsState['difficulty']) => void;
     setAutoSave: (enabled: boolean) => void;
     setTutorialHints: (enabled: boolean) => void;
+
+    // UI Actions
+    setIsOpen: (isOpen: boolean) => void;
+    toggleSettings: () => void;
+
     resetToDefaults: () => void;
 }
 
@@ -74,13 +84,15 @@ const defaultSettings = {
     sensitivity: 5,
     autoAim: false,
     controlLayout: 'A' as const,
+    movementMode: 'joystick' as const,
     colorblindMode: 'none' as const,
     reducedMotion: false,
     textSize: 'medium' as const,
     highContrast: false,
     difficulty: 'normal' as const,
     autoSave: true,
-    tutorialHints: true
+    tutorialHints: true,
+    isOpen: false
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -109,6 +121,7 @@ export const useSettingsStore = create<SettingsState>()(
             setSensitivity: (sensitivity) => set({ sensitivity }),
             setAutoAim: (enabled) => set({ autoAim: enabled }),
             setControlLayout: (layout) => set({ controlLayout: layout }),
+            setMovementMode: (mode) => set({ movementMode: mode }),
 
             setColorblindMode: (mode) => set({ colorblindMode: mode }),
             setReducedMotion: (enabled) => set({ reducedMotion: enabled }),
@@ -119,26 +132,30 @@ export const useSettingsStore = create<SettingsState>()(
             setAutoSave: (enabled) => set({ autoSave: enabled }),
             setTutorialHints: (enabled) => set({ tutorialHints: enabled }),
 
+            setIsOpen: (isOpen) => set({ isOpen }),
+            toggleSettings: () => set((state) => ({ isOpen: !state.isOpen })),
+
             resetToDefaults: () => set(defaultSettings)
         }),
         {
-            name: 'nightflare-settings'
+            name: 'nightflare-settings',
+            partialize: (state) => {
+                // Exclude UI state from persistence
+                const { isOpen, ...persisted } = state;
+                return persisted;
+            }
         }
     )
 );
 
-interface SettingsPanelProps {
-    onClose: () => void;
-}
-
-const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
+const SettingsPanel: React.FC = () => {
     const settings = useSettingsStore();
     const [activeTab, setActiveTab] = useState<'graphics' | 'audio' | 'controls' | 'accessibility' | 'gameplay'>('graphics');
 
     const handleClose = () => {
         haptics.menuClose();
         soundEffects.closeMenu();
-        onClose();
+        settings.setIsOpen(false);
     };
 
     const tabs = [
@@ -164,9 +181,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                     </div>
                     <button
                         onClick={handleClose}
-                        className="w-10 h-10 rounded-full bg-white/10 hover:bg-red-600 flex items-center justify-center text-white/70 hover:text-white transition-all"
+                        className="w-12 h-12 rounded-full bg-white/5 hover:bg-red-600 flex items-center justify-center text-white/70 hover:text-white transition-all border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+                        aria-label="Close"
                     >
-                        ✕
+                        <span className="text-xl font-bold">✕</span>
                     </button>
                 </div>
 
@@ -181,8 +199,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                                 soundEffects.switchTab();
                             }}
                             className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all whitespace-nowrap ${activeTab === tab.id
-                                    ? 'bg-orange-600 text-white shadow-lg scale-105'
-                                    : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+                                ? 'bg-orange-600 text-white shadow-lg scale-105'
+                                : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
                                 }`}
                         >
                             <span className="mr-2">{tab.icon}</span>
@@ -298,6 +316,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                             />
 
                             <SettingSelect
+                                label="Movement Mode"
+                                value={settings.movementMode}
+                                options={[
+                                    { value: 'joystick', label: 'Fixed Joystick' },
+                                    { value: 'touch', label: 'Direct Touch (Dynamic)' }
+                                ]}
+                                onChange={(value) => settings.setMovementMode(value as any)}
+                            />
+
+                            <SettingSelect
                                 label="Control Layout"
                                 value={settings.controlLayout}
                                 options={[
@@ -392,7 +420,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
                         Reset to Defaults
                     </button>
 
-                    <DeeJayLabsLogo className="scale-75 opacity-30" />
+                    <div className="scale-75 opacity-30">
+                        <DeeJayLabsLogo />
+                    </div>
                 </div>
             </div>
         </div>

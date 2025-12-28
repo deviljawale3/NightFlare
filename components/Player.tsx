@@ -7,6 +7,8 @@ import { GameState, IslandTheme } from '../types';
 
 const Player: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
+  const leftLegRef = useRef<THREE.Group>(null);
+  const rightLegRef = useRef<THREE.Group>(null);
   const velocity = useRef(new THREE.Vector3());
 
   const gameState = useGameStore(s => s.gameState);
@@ -14,6 +16,7 @@ const Player: React.FC = () => {
   const islandTheme = useGameStore(s => s.islandTheme);
   const triggerScreenShake = useGameStore(s => s.triggerScreenShake);
   const setPlayerGrounded = useGameStore(s => s.setPlayerGrounded);
+  const cycleWeapon = useGameStore(s => s.cycleWeapon);
 
   const [isAttacking, setIsAttacking] = useState(false);
   const [isDamaged, setIsDamaged] = useState(false);
@@ -31,6 +34,7 @@ const Player: React.FC = () => {
       keys.current[e.code] = true;
       if (e.code === 'Space') window.dispatchEvent(new Event('player-jump'));
       if (e.code === 'KeyF' || e.code === 'Enter') window.dispatchEvent(new Event('player-attack'));
+      if (e.code === 'KeyQ') cycleWeapon();
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       keys.current[e.code] = false;
@@ -56,7 +60,7 @@ const Player: React.FC = () => {
         setTimeout(() => {
           if (groupRef.current) {
             window.dispatchEvent(new CustomEvent('player-attack-hitbox', {
-              detail: { position: groupRef.current.position.clone(), range: playerStats.attackRange + 4.5, damage: playerStats.attackDamage * (1 + combo * 0.25) }
+              detail: { position: groupRef.current.position.clone(), range: playerStats.attackRange + 6.5, damage: playerStats.attackDamage * (1 + combo * 0.25) }
             }));
           }
         }, 110);
@@ -88,7 +92,7 @@ const Player: React.FC = () => {
       window.removeEventListener('player-attack', handleAttack);
       window.removeEventListener('player-damaged', handleDamaged);
     };
-  }, [isGrounded, isAttacking, triggerScreenShake, setPlayerGrounded, playerStats, combo]);
+  }, [isGrounded, isAttacking, triggerScreenShake, setPlayerGrounded, playerStats, combo, cycleWeapon]);
 
   const getEnhancedMaterial = (color: string, metalness = 0.3, roughness = 0.7) => (
     <meshStandardMaterial
@@ -117,7 +121,9 @@ const Player: React.FC = () => {
       if (keys.current['KeyD'] || keys.current['ArrowRight']) mX += 1;
     }
 
-    if (mX !== 0 || mZ !== 0) {
+    const isMoving = mX !== 0 || mZ !== 0;
+
+    if (isMoving) {
       const length = Math.sqrt(mX * mX + mZ * mZ);
       mX /= length;
       mZ /= length;
@@ -129,12 +135,25 @@ const Player: React.FC = () => {
       groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetHeading, 0.15);
     }
 
-    // Apply friction/damping
-    velocity.current.x *= 0.85;
-    velocity.current.z *= 0.85;
+    // Apply friction/damping (frame-rate independent)
+    const damping = 1 - Math.exp(-8 * delta);
+    velocity.current.x *= (1 - damping);
+    velocity.current.z *= (1 - damping);
 
     groupRef.current.position.x += velocity.current.x;
     groupRef.current.position.z += velocity.current.z;
+
+    // Leg Animation
+    if (leftLegRef.current && rightLegRef.current) {
+      if (isMoving || Math.abs(velocity.current.x) > 0.01 || Math.abs(velocity.current.z) > 0.01) {
+        const t = state.clock.getElapsedTime() * 15;
+        leftLegRef.current.rotation.x = Math.sin(t) * 0.5;
+        rightLegRef.current.rotation.x = Math.sin(t + Math.PI) * 0.5;
+      } else {
+        leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, 0, 0.1);
+        rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, 0, 0.1);
+      }
+    }
 
     // Jump Physics
     if (!isGrounded) {
@@ -163,9 +182,9 @@ const Player: React.FC = () => {
       />
 
       {/* BODY - More detailed torso */}
-      <mesh position={[0, 1.2, 0]} castShadow>
+      <mesh position={[0, 1.2, 0]} castShadow scale={isDamaged ? 1.2 : 1}>
         <boxGeometry args={[0.7, 1, 0.5]} />
-        {getEnhancedMaterial('#2c3e50', 0.5, 0.6)}
+        {getEnhancedMaterial(isDamaged ? '#ff0000' : '#2c3e50', 0.5, 0.6)}
       </mesh>
 
       {/* CHEST ARMOR PLATE */}
@@ -230,7 +249,7 @@ const Player: React.FC = () => {
       </group>
 
       {/* LEGS - Animated walking */}
-      <group position={[-0.2, 0.5, 0]} rotation={[Math.sin(Date.now() * 0.01) * 0.3, 0, 0]}>
+      <group ref={leftLegRef} position={[-0.2, 0.5, 0]}>
         <mesh castShadow>
           <boxGeometry args={[0.25, 0.9, 0.25]} />
           {getEnhancedMaterial('#34495e', 0.4, 0.7)}
@@ -245,7 +264,7 @@ const Player: React.FC = () => {
         </mesh>
       </group>
 
-      <group position={[0.2, 0.5, 0]} rotation={[-Math.sin(Date.now() * 0.01) * 0.3, 0, 0]}>
+      <group ref={rightLegRef} position={[0.2, 0.5, 0]}>
         <mesh castShadow>
           <boxGeometry args={[0.25, 0.9, 0.25]} />
           {getEnhancedMaterial('#34495e', 0.4, 0.7)}

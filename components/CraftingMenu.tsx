@@ -84,8 +84,12 @@ const CraftingMenu: React.FC<CraftingMenuProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
           <div className="flex flex-col items-end gap-3 md:gap-6">
-            <button onClick={onClose} className="w-10 h-10 md:w-12 md:h-12 bg-white/5 rounded-2xl flex items-center justify-center text-white/50 hover:bg-white/10 transition-all active:scale-90">
-              <span className="text-lg md:text-xl font-bold">✕</span>
+            <button
+              onClick={onClose}
+              className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-white/50 hover:bg-red-600 hover:text-white transition-all border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+              aria-label="Close"
+            >
+              <span className="text-xl font-bold">✕</span>
             </button>
             <div className="hidden md:block">
               <DeeJayLabsLogo className="scale-125 origin-right" />

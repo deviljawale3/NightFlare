@@ -31,9 +31,10 @@ const ArenaHub: React.FC<ArenaHubProps> = ({ onBack }) => {
                 {/* CLOSE BUTTON - Mobile Optimized */}
                 <button
                     onClick={onBack}
-                    className="absolute top-3 right-3 sm:top-6 sm:right-6 w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-black/80 hover:bg-red-600 text-white/70 hover:text-white transition-all z-50 border border-white/20 shadow-lg"
+                    className="absolute top-4 right-4 sm:top-6 sm:right-6 w-12 h-12 flex items-center justify-center rounded-full bg-black/60 hover:bg-red-600 text-white/70 hover:text-white transition-all z-[100] border border-white/20 shadow-xl backdrop-blur-md active:scale-90"
+                    aria-label="Close"
                 >
-                    ✕
+                    <span className="text-xl font-bold">✕</span>
                 </button>
 
                 {/* LEFT: Opponent Selection */}

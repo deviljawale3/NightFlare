@@ -22,7 +22,13 @@ const TournamentHub: React.FC<TournamentHubProps> = ({ onBack }) => {
 
                 {/* Header */}
                 <div className="relative z-10 p-6 sm:p-8 border-b border-white/10 bg-gradient-to-r from-yellow-900/20 to-orange-900/20">
-                    <button onClick={onBack} className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-colors">✕</button>
+                    <button
+                        onClick={onBack}
+                        className="absolute top-4 right-4 sm:top-6 sm:right-6 w-12 h-12 flex items-center justify-center rounded-full bg-black/40 hover:bg-red-600 text-white/50 hover:text-white transition-all z-50 border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+                        aria-label="Close"
+                    >
+                        <span className="text-xl font-bold">✕</span>
+                    </button>
 
                     <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter flex items-center gap-3 mb-2">
                         <span className="text-yellow-500">🏆</span> Tournament Arena

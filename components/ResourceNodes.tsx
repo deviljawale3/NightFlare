@@ -29,6 +29,8 @@ const ResourceNodes: React.FC = () => {
     setNodes(newNodes);
   }, [level, wave, setNodes]);
 
+  const itemsRef = useRef<{ [key: string]: THREE.Group | null }>({});
+
   useFrame((state) => {
     if (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) return;
 
@@ -56,6 +58,17 @@ const ResourceNodes: React.FC = () => {
         setNodes([...currentNodes, ...respawned]);
       }
     }
+
+    // Batch Animation for all nodes
+    nodes.forEach(node => {
+      const mesh = itemsRef.current[node.id];
+      if (mesh) {
+        mesh.position.y = Math.sin(t * 1.5 + node.position[0]) * 0.15;
+        if (node.type === 'CRYSTAL' || node.type === 'FOOD') {
+          mesh.rotation.y = t * 0.5;
+        }
+      }
+    });
   });
 
   useEffect(() => {
@@ -93,25 +106,19 @@ const ResourceNodes: React.FC = () => {
   return (
     <group>
       {nodes.map(node => (
-        <NodeItem key={node.id} data={node} onHarvest={() => handleHarvest(node.id, node.type, node.position)} />
+        <NodeItem
+          key={node.id}
+          data={node}
+          onHarvest={() => handleHarvest(node.id, node.type, node.position)}
+          ref={el => itemsRef.current[node.id] = el}
+        />
       ))}
     </group>
   );
 };
 
-const NodeItem: React.FC<{ data: ResourceNode; onHarvest: () => void }> = ({ data, onHarvest }) => {
-  const meshRef = useRef<THREE.Group>(null);
-
-  useFrame((state) => {
-    if (!meshRef.current) return;
-    const t = state.clock.getElapsedTime();
-    // Subtle breathing animation
-    meshRef.current.position.y = Math.sin(t * 1.5 + data.position[0]) * 0.15;
-    if (data.type === 'CRYSTAL' || data.type === 'FOOD') {
-      meshRef.current.rotation.y = t * 0.5;
-    }
-  });
-
+const NodeItem = React.forwardRef<THREE.Group, { data: ResourceNode; onHarvest: () => void }>(({ data, onHarvest }, meshRef) => {
+  // useFrame removed from here and moved to parent for performance
   return (
     <group ref={meshRef} position={data.position as any} onClick={(e) => { e.stopPropagation(); onHarvest(); }}>
       {data.type === 'TREE' && (
@@ -180,6 +187,6 @@ const NodeItem: React.FC<{ data: ResourceNode; onHarvest: () => void }> = ({ dat
       )}
     </group>
   );
-};
+});
 
 export default ResourceNodes;

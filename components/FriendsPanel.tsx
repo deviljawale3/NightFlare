@@ -40,7 +40,13 @@ const FriendsPanel: React.FC<FriendsPanelProps> = ({ onBack }) => {
                         <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter">Social Network</h2>
                         <div className="text-[10px] text-white/30 uppercase tracking-widest mt-1">Connect with other survivors</div>
                     </div>
-                    <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-colors">✕</button>
+                    <button
+                        onClick={onBack}
+                        className="w-12 h-12 rounded-full bg-white/5 hover:bg-red-600 flex items-center justify-center text-white/50 hover:text-white transition-all border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+                        aria-label="Close"
+                    >
+                        <span className="text-xl font-bold">✕</span>
+                    </button>
                 </div>
 
                 {/* Tabs */}

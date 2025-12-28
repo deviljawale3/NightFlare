@@ -36,7 +36,12 @@ const AmbientSounds: React.FC = () => {
     if (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) return;
 
     if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      try {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      } catch (e) {
+        console.error("AudioContext check failed", e);
+        return;
+      }
     }
     const ctx = audioCtxRef.current;
 
@@ -44,7 +49,7 @@ const AmbientSounds: React.FC = () => {
       bgmRef.current = ctx.createGain();
       bgmRef.current.connect(ctx.destination);
       bgmRef.current.gain.setValueAtTime(0.08, ctx.currentTime);
-      
+
       const createSynth = (freq: number, type: OscillatorType) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
@@ -55,11 +60,16 @@ const AmbientSounds: React.FC = () => {
         osc.start();
         return osc;
       };
-      
+
       bgmOscRef.current = [
         createSynth(440, 'sine'),   // Ethereal Mid
         createSynth(110, 'triangle') // Deep Bass
       ];
+    } else {
+      // Double check connections
+      try {
+        bgmRef.current.connect(ctx.destination);
+      } catch (e) { }
     }
 
     const isNight = timeOfDay === TimeOfDay.NIGHT;

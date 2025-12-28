@@ -72,6 +72,7 @@ interface GameStore {
   giftLife: (targetId: string, fromChat?: boolean) => boolean;
   upgradeWeapon: (weapon: import('./types').WeaponType) => void;
   equipWeapon: (weapon: import('./types').WeaponType) => void;
+  cycleWeapon: () => void;
   lives: number;
   lastLifeRegen: number;
   useLife: () => boolean;
@@ -595,6 +596,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
   upgradePlayer: (upgrade) => set((state) => ({
     playerStats: { ...state.playerStats, ...upgrade }
   })),
+
+  cycleWeapon: () => set((state) => {
+    const weapons: ('STAFF' | 'SWORD' | 'BOW')[] = ['STAFF', 'SWORD'];
+    // Only allow switching to SWORD if leveled up
+    if (state.playerStats.weaponLevels.SWORD <= 0) return state;
+
+    const currentIndex = weapons.indexOf(state.playerStats.currentWeapon);
+    const nextIndex = (currentIndex + 1) % weapons.length;
+    return {
+      playerStats: { ...state.playerStats, currentWeapon: weapons[nextIndex] }
+    };
+  }),
 
   buyPermanentUpgrade: (stat) => {
     const { playerStats, resources, consumeResource } = get();

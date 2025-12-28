@@ -11,6 +11,7 @@ import Nightflare from './Nightflare';
 import Enemies from './Enemies';
 import ResourceNodes from './ResourceNodes';
 import Structures from './Structures';
+import { DamageNumbers } from './FloatingText';
 
 const GameScene: React.FC = () => {
   const gameState = useGameStore(s => s.gameState);
@@ -112,7 +113,8 @@ const GameScene: React.FC = () => {
           <ResourceNodes />
         </>
       )}
-      {timeOfDay === TimeOfDay.NIGHT && gameState !== GameState.MAIN_MENU && <Enemies />}
+      {gameState !== GameState.MAIN_MENU && <Enemies />}
+      {gameState !== GameState.MAIN_MENU && <DamageNumbers />}
 
       {novaVisual && <NovaVFX />}
 

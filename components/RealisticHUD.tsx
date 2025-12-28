@@ -1,9 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '../store';
+import { useSettingsStore } from './SettingsPanel';
 import { GameState } from '../types';
 import Minimap from './Minimap';
 
-const RealisticHUD: React.FC = () => {
+interface RealisticHUDProps {
+    showInventory: () => void;
+    showCrafting: () => void;
+}
+
+const RealisticHUD: React.FC<RealisticHUDProps> = ({ showInventory, showCrafting }) => {
     const {
         resources,
         playerStats,
@@ -11,13 +17,80 @@ const RealisticHUD: React.FC = () => {
         wave,
         level,
         levelTimer,
-        challengeState,
-        arenaStats,
         setGameState,
         triggerNova
     } = useGameStore();
 
+    const { toggleSettings } = useSettingsStore();
+
     const [showMap, setShowMap] = useState(true);
+
+    // Joystick State
+    const joystickRef = useRef<HTMLDivElement>(null);
+    const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
+    const [isJoystickActive, setIsJoystickActive] = useState(false);
+    const [dynamicOrigin, setDynamicOrigin] = useState<{ x: number, y: number } | null>(null);
+    const movementMode = useSettingsStore(s => s.movementMode);
+
+    const handleJoystickStart = (e: React.PointerEvent) => {
+        setIsJoystickActive(true);
+        (e.target as Element).setPointerCapture(e.pointerId);
+
+        if (movementMode === 'touch') {
+            setDynamicOrigin({ x: e.clientX, y: e.clientY });
+            setJoystickPos({ x: 0, y: 0 });
+        } else {
+            handleJoystickMove(e);
+        }
+    };
+
+    const handleJoystickMove = (e: React.PointerEvent) => {
+        if (!isJoystickActive && e.type !== 'pointerdown') return;
+
+        // Calculate Center
+        let centerX, centerY;
+
+        if (movementMode === 'touch') {
+            if (!dynamicOrigin) return;
+            centerX = dynamicOrigin.x;
+            centerY = dynamicOrigin.y;
+        } else {
+            if (!joystickRef.current) return;
+            const rect = joystickRef.current.getBoundingClientRect();
+            centerX = rect.left + rect.width / 2;
+            centerY = rect.top + rect.height / 2;
+        }
+
+        // Calculate raw delta from center
+        let dx = e.clientX - centerX;
+        let dy = e.clientY - centerY;
+
+        // Calculate distance and clamp to radius
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const maxRadius = movementMode === 'touch' ? 50 : 35; // Larger radius for dynamic
+
+        if (distance > maxRadius) {
+            const ratio = maxRadius / distance;
+            dx *= ratio;
+            dy *= ratio;
+        }
+
+        // Update visual position
+        setJoystickPos({ x: dx, y: dy });
+
+        // Update Global Input for Player.tsx
+        // Normalize to -1 to 1 range
+        (window as any).joystickX = dx / maxRadius;
+        (window as any).joystickY = dy / maxRadius;
+    };
+
+    const handleJoystickEnd = (e: React.PointerEvent) => {
+        setIsJoystickActive(false);
+        setJoystickPos({ x: 0, y: 0 });
+        setDynamicOrigin(null);
+        (window as any).joystickX = 0;
+        (window as any).joystickY = 0;
+    };
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -126,6 +199,7 @@ const RealisticHUD: React.FC = () => {
                         <span className="text-lg">⏸️</span>
                     </button>
                     <button
+                        onClick={toggleSettings}
                         className="w-10 h-10 bg-black/60 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center text-white/70 hover:text-white hover:bg-black/80 transition-all shadow-lg active:scale-95"
                         title="Settings"
                     >
@@ -137,21 +211,71 @@ const RealisticHUD: React.FC = () => {
             {/* BOTTOM BAR - Transparent overlay */}
             <div className="absolute bottom-0 left-0 right-0 h-32 sm:h-40 bg-gradient-to-t from-black/60 via-black/30 to-transparent pointer-events-none" />
 
-            {/* BOTTOM LEFT: Movement Controls (Mobile) */}
-            <div className="absolute bottom-4 left-4 pointer-events-auto md:hidden">
-                <div className="relative w-28 h-28 bg-black/40 backdrop-blur-md rounded-full border-2 border-white/20 shadow-2xl">
-                    {/* Joystick base */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-12 h-12 bg-white/20 rounded-full border-2 border-white/30" />
-                    </div>
-                    {/* Direction indicators */}
-                    <div className="absolute top-2 left-1/2 -translate-x-1/2 text-white/40 text-xs">▲</div>
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-white/40 text-xs">▼</div>
-                    <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white/40 text-xs">◀</div>
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 text-xs">▶</div>
+            {/* BOTTOM LEFT: Movement Controls */}
+            {movementMode === 'touch' ? (
+                // DYNAMIC TOUCH ZONE (Left Half)
+                <div
+                    className="absolute inset-y-0 left-0 w-1/2 pointer-events-auto z-40 touch-none"
+                    onPointerDown={handleJoystickStart}
+                    onPointerMove={handleJoystickMove}
+                    onPointerUp={handleJoystickEnd}
+                    onPointerLeave={handleJoystickEnd}
+                >
+                    {isJoystickActive && dynamicOrigin && (
+                        <div
+                            className="absolute w-24 h-24 bg-white/10 rounded-full border border-white/20 shadow-xl backdrop-blur-sm pointer-events-none animate-in fade-in duration-100"
+                            style={{
+                                left: dynamicOrigin.x - 48,
+                                top: dynamicOrigin.y - 48
+                            }}
+                        >
+                            {/* Knob */}
+                            <div
+                                className="absolute w-12 h-12 bg-white/40 rounded-full border border-white/50 shadow-lg"
+                                style={{
+                                    left: '50%',
+                                    top: '50%',
+                                    transform: `translate(calc(-50% + ${joystickPos.x}px), calc(-50% + ${joystickPos.y}px))`
+                                }}
+                            />
+                        </div>
+                    )}
+                    {!isJoystickActive && (
+                        <div className="absolute bottom-10 left-10 text-white/30 text-[10px] font-mono animate-pulse pointer-events-none">
+                            TOUCH ANYWHERE TO MOVE
+                        </div>
+                    )}
                 </div>
-                <div className="text-center mt-1 text-[7px] text-white/40 font-bold uppercase">Move</div>
-            </div>
+            ) : (
+                // FIXED JOYSTICK (Bottom Left)
+                <div className="absolute bottom-4 left-4 pointer-events-auto">
+                    <div
+                        ref={joystickRef}
+                        className="relative w-32 h-32 bg-black/40 backdrop-blur-md rounded-full border-2 border-white/20 shadow-2xl touch-none"
+                        onPointerDown={handleJoystickStart}
+                        onPointerMove={handleJoystickMove}
+                        onPointerUp={handleJoystickEnd}
+                        onPointerLeave={handleJoystickEnd}
+                    >
+                        {/* Joystick Knob */}
+                        <div
+                            className="absolute w-14 h-14 bg-white/20 rounded-full border-2 border-white/30 shadow-lg backdrop-blur-sm transition-transform duration-75 pointer-events-none"
+                            style={{
+                                left: '50%',
+                                top: '50%',
+                                transform: `translate(calc(-50% + ${joystickPos.x}px), calc(-50% + ${joystickPos.y}px))`
+                            }}
+                        />
+
+                        {/* Direction indicators */}
+                        <div className="absolute top-2 left-1/2 -translate-x-1/2 text-white/40 text-xs font-bold">W</div>
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-white/40 text-xs font-bold">S</div>
+                        <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white/40 text-xs font-bold">A</div>
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 text-xs font-bold">D</div>
+                    </div>
+                    <div className="text-center mt-1 text-[8px] text-white/40 font-bold uppercase tracking-widest">Move</div>
+                </div>
+            )}
 
             {/* BOTTOM CENTER: Health + Nova */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
@@ -238,13 +362,15 @@ const RealisticHUD: React.FC = () => {
                 {/* Inventory/Crafting */}
                 <div className="flex gap-2">
                     <button
-                        className="w-12 h-12 bg-black/60 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center text-xl hover:bg-black/80 transition-all shadow-lg active:scale-95"
+                        onClick={showInventory}
+                        className="w-12 h-12 bg-black/60 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center text-xl hover:bg-black/80 transition-all shadow-lg active:scale-95 pointer-events-auto"
                         title="Inventory (I)"
                     >
                         🎒
                     </button>
                     <button
-                        className="w-12 h-12 bg-black/60 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center text-xl hover:bg-black/80 transition-all shadow-lg active:scale-95"
+                        onClick={showCrafting}
+                        className="w-12 h-12 bg-black/60 backdrop-blur-md rounded-xl border border-white/20 flex items-center justify-center text-xl hover:bg-black/80 transition-all shadow-lg active:scale-95 pointer-events-auto"
                         title="Crafting (C)"
                     >
                         🛠️

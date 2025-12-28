@@ -4,7 +4,7 @@ import { useGameStore } from '../store';
 import { GameState } from '../types';
 import DeeJayLabsLogo from './DeeJayLabsLogo';
 import HowToPlay from './HowToPlay';
-import SettingsPanel from './SettingsPanel';
+import SettingsPanel, { useSettingsStore } from './SettingsPanel';
 import ChatPanel from './ChatPanel';
 import ArenaHub from './ArenaHub';
 import BattleHistory from './BattleHistory';
@@ -24,8 +24,9 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
     lives, lastLifeRegen, checkLifeRegen, giftLife
   } = useGameStore();
 
+  const settings = useSettingsStore();
+
   const [showHowToPlay, setShowHowToPlay] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showArena, setShowArena] = useState(false);
@@ -169,7 +170,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
 
               {/* Settings */}
               <button
-                onClick={() => setShowSettings(true)}
+                onClick={() => settings.setIsOpen(true)}
                 className="group aspect-square bg-black/40 backdrop-blur-md rounded-xl border border-white/10 hover:border-white/30 hover:bg-white/5 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 shadow-lg"
                 title="Settings"
               >
@@ -250,14 +251,13 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
               <div className="text-white text-lg sm:text-xl font-black tabular-nums">{bestScore.toLocaleString()}</div>
             </div>
           </div>
-          <div className="opacity-80 hover:opacity-100 transition-opacity drop-shadow-[0_0_20px_rgba(255,107,0,0.5)] pb-4 sm:pb-6">
-            <DeeJayLabsLogo className="scale-[1.2] sm:scale-[1.6]" />
+          <div className="opacity-80 hover:opacity-100 transition-opacity drop-shadow-[0_0_20px_rgba(255,107,0,0.5)] pb-4 sm:pb-6 scale-[1.2] sm:scale-[1.6]">
+            <DeeJayLabsLogo />
           </div>
         </div>
       </div>
 
       {showHowToPlay && <HowToPlay onBack={() => setShowHowToPlay(false)} />}
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
       {/* PROFILE SETTINGS MODAL */}
       {showProfile && (
@@ -336,8 +336,8 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
               <button onClick={() => { updateUserProfile({ name: editName, email: editEmail, avatar: editAvatar }); setShowProfile(false); }} className="flex-1 bg-orange-600 py-3 rounded-xl text-white font-black uppercase text-xs tracking-widest hover:bg-orange-500">Save Profile</button>
             </div>
 
-            <div className="mt-6 flex justify-center opacity-50">
-              <DeeJayLabsLogo className="scale-75" />
+            <div className="mt-6 flex justify-center opacity-50 scale-75">
+              <DeeJayLabsLogo />
             </div>
           </div>
         </div>
@@ -374,8 +374,8 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
                 ))}
               </div>
 
-              <div className="p-4 border-t border-white/5 flex justify-center opacity-40">
-                <DeeJayLabsLogo className="scale-75" />
+              <div className="p-4 border-t border-white/5 flex justify-center opacity-40 scale-75">
+                <DeeJayLabsLogo />
               </div>
             </div>
 

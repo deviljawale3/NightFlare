@@ -29,7 +29,13 @@ const BattleHistory: React.FC<BattleHistoryProps> = ({ onBack }) => {
 
                 {/* Header */}
                 <div className="relative z-10 p-6 sm:p-8 border-b border-white/10 bg-gradient-to-r from-purple-900/20 to-blue-900/20">
-                    <button onClick={onBack} className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-colors">✕</button>
+                    <button
+                        onClick={onBack}
+                        className="absolute top-4 right-4 sm:top-6 sm:right-6 w-12 h-12 flex items-center justify-center rounded-full bg-white/5 hover:bg-red-600 text-white/50 hover:text-white transition-all z-50 border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+                        aria-label="Close"
+                    >
+                        <span className="text-xl font-bold">✕</span>
+                    </button>
 
                     <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter flex items-center gap-3 mb-4">
                         <span className="text-purple-500">📜</span> Battle Archives
@@ -83,15 +89,15 @@ const BattleHistory: React.FC<BattleHistoryProps> = ({ onBack }) => {
                                 <div
                                     key={battle.id}
                                     className={`bg-white/5 rounded-xl p-4 border transition-all hover:bg-white/10 ${battle.result === 'VICTORY' ? 'border-green-500/20' :
-                                            battle.result === 'DEFEAT' ? 'border-red-500/20' :
-                                                'border-white/10'
+                                        battle.result === 'DEFEAT' ? 'border-red-500/20' :
+                                            'border-white/10'
                                         }`}
                                 >
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-3">
                                             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl ${battle.result === 'VICTORY' ? 'bg-green-600/20 border-2 border-green-500' :
-                                                    battle.result === 'DEFEAT' ? 'bg-red-600/20 border-2 border-red-500' :
-                                                        'bg-white/10 border-2 border-white/20'
+                                                battle.result === 'DEFEAT' ? 'bg-red-600/20 border-2 border-red-500' :
+                                                    'bg-white/10 border-2 border-white/20'
                                                 }`}>
                                                 {battle.opponentAvatar}
                                             </div>
@@ -108,12 +114,12 @@ const BattleHistory: React.FC<BattleHistoryProps> = ({ onBack }) => {
                                         </div>
 
                                         <div className={`text-right px-4 py-2 rounded-lg ${battle.result === 'VICTORY' ? 'bg-green-600/20' :
-                                                battle.result === 'DEFEAT' ? 'bg-red-600/20' :
-                                                    'bg-white/10'
+                                            battle.result === 'DEFEAT' ? 'bg-red-600/20' :
+                                                'bg-white/10'
                                             }`}>
                                             <div className={`text-xs font-black uppercase ${battle.result === 'VICTORY' ? 'text-green-400' :
-                                                    battle.result === 'DEFEAT' ? 'text-red-400' :
-                                                        'text-white/50'
+                                                battle.result === 'DEFEAT' ? 'text-red-400' :
+                                                    'text-white/50'
                                                 }`}>
                                                 {battle.result}
                                             </div>

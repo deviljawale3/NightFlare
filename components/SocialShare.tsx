@@ -160,7 +160,13 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
 
                 {/* Decorative Elements */}
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-50" />
-                <button onClick={onClose} className="absolute top-6 right-6 w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/50 hover:bg-white/10 hover:text-white transition-all z-10">✕</button>
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 sm:top-6 sm:right-6 w-12 h-12 flex items-center justify-center rounded-full bg-white/5 hover:bg-red-600 text-white/50 hover:text-white transition-all z-50 border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+                    aria-label="Close"
+                >
+                    <span className="text-xl font-bold">✕</span>
+                </button>
 
                 <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-6 drop-shadow-lg flex items-center gap-2">
                     <span className="text-orange-500">●</span> Broadcast

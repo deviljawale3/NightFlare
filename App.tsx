@@ -97,7 +97,6 @@ const App: React.FC = () => {
 
   // New Premium State
   const [isLoading, setIsLoading] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
 
   // Premium Store Hooks
   const { initializeAchievements } = useAchievementStore();
@@ -135,11 +134,21 @@ const App: React.FC = () => {
     }
   }, [gameState, saveGame]);
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) return;
+      if (e.code === 'KeyI') setShowInventory(prev => !prev);
+      if (e.code === 'KeyC') setShowCrafting(prev => !prev);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [gameState]);
+
   const shakeStyle = screenShake > 0 ? {
     transform: `translate(${(Math.random() - 0.5) * screenShake * 50}px, ${(Math.random() - 0.5) * screenShake * 50}px)`
   } : {};
 
-  const isModalOpen = showTournament || showFriends || showAnalytics || showSeason || showSettings;
+  const isModalOpen = showTournament || showFriends || showAnalytics || showSeason || settings.isOpen;
 
   return (
     <div className="fixed inset-0 w-full h-full bg-[#050505] overflow-hidden select-none">
@@ -150,7 +159,7 @@ const App: React.FC = () => {
       {/* 2. GLOBAL POPUPS (Always on top) */}
       <AchievementPopup />
       <DailyRewardModal />
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {settings.isOpen && <SettingsPanel />}
       <AmbientSounds />
 
       {/* 3. 3D RENDER LAYER (Only render if not loading to save resources) */}
@@ -201,7 +210,10 @@ const App: React.FC = () => {
           {showSeason && <SeasonPanel onBack={() => setShowSeason(false)} />}
 
           {(gameState === GameState.PLAYING || gameState === GameState.PAUSED || gameState === GameState.TUTORIAL || gameState === GameState.LEVEL_CLEAR) && (
-            <RealisticHUD />
+            <RealisticHUD
+              showInventory={() => setShowInventory(true)}
+              showCrafting={() => setShowCrafting(true)}
+            />
           )}
 
           {gameState === GameState.PAUSED && <PauseMenu />}

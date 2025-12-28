@@ -58,7 +58,13 @@ const SeasonPanel: React.FC<SeasonPanelProps> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    <button onClick={onBack} className="absolute top-6 right-6 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white/50 hover:text-white transition-all z-20">✕</button>
+                    <button
+                        onClick={onBack}
+                        className="absolute top-4 right-4 sm:top-6 sm:right-6 w-12 h-12 rounded-full bg-black/40 hover:bg-red-600 flex items-center justify-center text-white/50 hover:text-white transition-all z-50 border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+                        aria-label="Close"
+                    >
+                        <span className="text-xl font-bold">✕</span>
+                    </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-2 gap-8 custom-scrollbar">

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
-import { EnemyType, GameState, EnemyClass, EnemyTarget, EnemyBehavior, IslandTheme, NightEvent } from '../types';
+import { EnemyType, GameState, EnemyClass, EnemyTarget, EnemyBehavior, IslandTheme, NightEvent, TimeOfDay } from '../types';
 
 const _centerVec = new THREE.Vector3(0, 0, 0);
 const _avoidVec = new THREE.Vector3();
@@ -33,6 +33,8 @@ class EnemyEntity implements EnemyType {
   lastVelocity: THREE.Vector3 = new THREE.Vector3(0, 0, 1);
   lastAttackTime: number = 0;
   seed: number;
+  scored: boolean = false;
+  lerpPosition: THREE.Vector3;
 
   constructor(base: EnemyType) {
     this.id = base.id;
@@ -44,6 +46,7 @@ class EnemyEntity implements EnemyType {
     this.target = base.target;
     this.behavior = base.behavior;
     this.seed = Math.random();
+    this.lerpPosition = new THREE.Vector3(...base.position);
 
     // Default Waypoints
     this.waypoints = [
@@ -207,6 +210,15 @@ const Enemies: React.FC = () => {
         if (en.dying) return;
         if (new THREE.Vector3(...en.position).distanceTo(attackPos) < range) {
           en.health -= damage;
+
+          window.dispatchEvent(new CustomEvent('enemy-hit-visual', {
+            detail: {
+              position: en.position,
+              damage: damage,
+              isCrit: damage > 50
+            }
+          }));
+
           if (en.health <= 0) { en.health = 0; en.dying = true; en.deathTime = now; }
           else { en.hitTime = now; en.behavior = EnemyBehavior.CHASE; en.stateTimer = now / 1000; }
         }
@@ -220,6 +232,15 @@ const Enemies: React.FC = () => {
         if (en.id === id || id === 'any') {
           if (en.dying) return;
           en.health -= (damage || 35);
+
+          window.dispatchEvent(new CustomEvent('enemy-hit-visual', {
+            detail: {
+              position: en.position,
+              damage: damage || 35,
+              isCrit: (damage || 35) > 50
+            }
+          }));
+
           if (en.health <= 0) { en.dying = true; en.deathTime = now; }
           else { en.hitTime = now; en.behavior = EnemyBehavior.CHASE; }
         }
@@ -240,19 +261,27 @@ const Enemies: React.FC = () => {
   }, []);
 
   useFrame((state, delta) => {
-    if (gameState !== GameState.PLAYING) return;
+    if (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) return;
+    const timeOfDay = useGameStore.getState().timeOfDay;
+    if (timeOfDay === TimeOfDay.DAY) return;
+
     const currentTime = state.clock.getElapsedTime();
     const nowMs = performance.now();
     const playerPos = (window as any).playerPos || new THREE.Vector3(1000, 0, 1000);
 
-    const currentEvent = useGameStore(s => s.currentNightEvent);
+    const currentEvent = useGameStore.getState().currentNightEvent;
     let spawnRate = Math.max(0.3, 3.2 / (1 + (level - 1) * 0.9 + (wave - 1) * 0.5));
     let maxEnemies = 12 + level * 7 + wave * 3;
 
     if (currentEvent === NightEvent.RUSH) { spawnRate *= 0.4; maxEnemies *= 1.8; }
     else if (currentEvent === NightEvent.SIEGE) { spawnRate *= 1.5; maxEnemies *= 0.6; }
 
+    const survivors: EnemyEntity[] = [];
+    let listChanged = false;
+
+    // Batch spawn new enemies if needed
     if (currentTime - lastSpawnTime.current > spawnRate && enemiesRef.current.length < maxEnemies) {
+      // ... same spawn logic ...
       const angle = Math.random() * Math.PI * 2;
       const radius = 55 + Math.random() * 20;
       const spawnPos: [number, number, number] = [Math.cos(angle) * radius, 0, Math.sin(angle) * radius];
@@ -294,15 +323,17 @@ const Enemies: React.FC = () => {
         behavior: EnemyBehavior.PATROL
       });
       enemiesRef.current.push(newEntity);
-      setEnemyIds(enemiesRef.current.map(e => e.id));
       lastSpawnTime.current = currentTime;
+      listChanged = true;
     }
 
-    const killedThisFrame: EnemyClass[] = [];
-    const survivors: EnemyEntity[] = [];
     for (const enemy of enemiesRef.current) {
       if (enemy.dying) {
-        if (nowMs - enemy.deathTime > 1600) { killedThisFrame.push(enemy.type); continue; }
+        if (!enemy.scored) {
+          recordEnemyKill(enemy.type);
+          enemy.scored = true;
+        }
+        if (nowMs - enemy.deathTime > 1600) { continue; }
         survivors.push(enemy); continue;
       }
       const currentPos = new THREE.Vector3(...enemy.position);
@@ -348,27 +379,53 @@ const Enemies: React.FC = () => {
       }
 
       _desiredVec.copy(moveTarget).sub(currentPos).normalize();
+
+      // Optimization: Smaller neighborhood for separation
       _sepVec.set(0, 0, 0);
-      for (const other of enemiesRef.current) {
+      for (const other of survivors) {
         if (other === enemy || other.dying) continue;
         const op = new THREE.Vector3(...other.position);
-        const dst = currentPos.distanceTo(op);
-        if (dst < 5.0) _sepVec.add(currentPos.clone().sub(op).normalize().multiplyScalar(8 / (dst + 0.1)));
+        const dstSq = currentPos.distanceToSquared(op);
+        if (dstSq < 25.0) { // 5.0 unit distance
+          const dst = Math.sqrt(dstSq);
+          _sepVec.add(currentPos.clone().sub(op).normalize().multiplyScalar(8 / (dst + 0.1)));
+        }
       }
+
       _avoidVec.set(0, 0, 0);
       for (const obs of obstacleMap) {
         const toObs = obs.pos.clone().sub(currentPos);
-        if (toObs.length() < 12) _avoidVec.add(toObs.clone().projectOnVector(_desiredVec).sub(toObs).normalize().multiplyScalar(40));
+        const distSq = toObs.lengthSq();
+        if (distSq < 144) { // 12 unit distance
+          _avoidVec.add(toObs.clone().projectOnVector(_desiredVec).sub(toObs).normalize().multiplyScalar(40));
+        }
       }
+
       const steering = _desiredVec.clone().add(_avoidVec).add(_sepVec).normalize();
       const velocity = steering.multiplyScalar(enemy.speed * spdMult * delta);
       enemy.lastVelocity.copy(steering);
+
+      // Update position
       enemy.position = [enemy.position[0] + velocity.x, 0, enemy.position[2] + velocity.z];
+
+      // Update runtime lerp position (frame-rate independent)
+      enemy.lerpPosition.lerp(new THREE.Vector3(...enemy.position), 1 - Math.exp(-15 * delta));
+
       survivors.push(enemy);
     }
+
+    // Check if list size changed (spawn or death cleanup)
+    if (enemiesRef.current.length !== survivors.length) listChanged = true;
+
     enemiesRef.current = survivors;
-    setEnemyIds(survivors.map(e => e.id));
-    if (killedThisFrame.length > 0) killedThisFrame.forEach(t => recordEnemyKill(t));
+
+    // Update global for HUD
+    (window as any).gameEnemies = survivors;
+
+    // ONLY update state if the list structure actually changed
+    if (listChanged) {
+      setEnemyIds(survivors.map(e => e.id));
+    }
   });
 
   return (
@@ -384,21 +441,28 @@ const EnemyRenderer: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
   const ref = useRef<THREE.Group>(null);
   const splashRef = useRef<THREE.Group>(null);
 
-  useFrame(() => {
+  useFrame((state, delta) => {
     if (!ref.current) return;
-    ref.current.position.lerp(new THREE.Vector3(...entity.position), 0.2);
+
+    // Position already lerped in parent loop for performance
+    ref.current.position.copy(entity.lerpPosition);
+
     const targetRotation = Math.atan2(entity.lastVelocity.x, entity.lastVelocity.z);
     let rotDiff = targetRotation - ref.current.rotation.y;
     while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
     while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
-    ref.current.rotation.y += rotDiff * 0.15;
+    ref.current.rotation.y += rotDiff * (1 - Math.exp(-15 * delta));
 
     if (entity.dying && splashRef.current) {
       splashRef.current.visible = true;
       const dp = (performance.now() - entity.deathTime) / 1000;
       splashRef.current.scale.setScalar(Math.max(0, 1 + dp * 2));
       splashRef.current.children.forEach(c => {
-        if (c instanceof THREE.Mesh) c.material.opacity = Math.max(0, 1 - dp * 0.8);
+        if (c instanceof THREE.Mesh) {
+          const mat = c.material as THREE.MeshStandardMaterial;
+          mat.opacity = Math.max(0, 1 - dp * 0.8);
+          mat.transparent = true;
+        }
       });
     }
   });

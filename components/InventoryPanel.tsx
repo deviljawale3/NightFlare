@@ -16,7 +16,13 @@ const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest mt-1">Current Session Data</p>
           </div>
           <div className="flex flex-col items-end gap-3">
-            <button onClick={onClose} className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-white/50 hover:bg-white/10">✕</button>
+            <button
+              onClick={onClose}
+              className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-white/50 hover:bg-red-600 hover:text-white transition-all border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
+              aria-label="Close"
+            >
+              <span className="text-xl font-bold">✕</span>
+            </button>
             <DeeJayLabsLogo className="mt-1 scale-90 origin-right" />
           </div>
         </div>
