@@ -21,6 +21,8 @@ const GameScene: React.FC = () => {
   const wave = useGameStore(s => s.wave);
   const getNightName = useGameStore(s => s.getNightName);
   const currentNightEvent = useGameStore(s => s.currentNightEvent);
+  const updateChallenge = useGameStore(s => s.updateChallenge);
+  const challengeState = useGameStore(s => s.challengeState);
 
   const [phaseTimer, setPhaseTimer] = useState(0);
   const [showBanner, setShowBanner] = useState(false);
@@ -37,21 +39,28 @@ const GameScene: React.FC = () => {
       // Manage Level Timer
       decrementTimer();
 
-      // Manage Day/Night Cycles
-      setPhaseTimer(prev => {
-        const next = prev + 1;
-        if (timeOfDay === TimeOfDay.DAY && next >= 45) {
-          setTimeOfDay(TimeOfDay.NIGHT);
-          setShowBanner(true);
-          setTimeout(() => setShowBanner(false), 4500);
-          return 0;
-        } else if (timeOfDay === TimeOfDay.NIGHT && next >= 70) {
-          setTimeOfDay(TimeOfDay.DAY);
-          nextWave();
-          return 0;
-        }
-        return next;
-      });
+      // Update Challenge if active
+      if (challengeState?.isActive) {
+        updateChallenge();
+      }
+
+      // Manage Day/Night Cycles (Skip if in challenge mode)
+      if (!challengeState?.isActive) {
+        setPhaseTimer(prev => {
+          const next = prev + 1;
+          if (timeOfDay === TimeOfDay.DAY && next >= 45) {
+            setTimeOfDay(TimeOfDay.NIGHT);
+            setShowBanner(true);
+            setTimeout(() => setShowBanner(false), 4500);
+            return 0;
+          } else if (timeOfDay === TimeOfDay.NIGHT && next >= 70) {
+            setTimeOfDay(TimeOfDay.DAY);
+            nextWave();
+            return 0;
+          }
+          return next;
+        });
+      }
     }, 1000);
 
     const handleImpact = (e: any) => {
@@ -90,7 +99,7 @@ const GameScene: React.FC = () => {
       window.removeEventListener('pylon-fire', handlePylonFire);
       window.removeEventListener('resource-collected', handleResourceCollect);
     };
-  }, [gameState, timeOfDay, setTimeOfDay, nextWave, decrementTimer]);
+  }, [gameState, timeOfDay, setTimeOfDay, nextWave, decrementTimer, updateChallenge, challengeState]);
 
   return (
     <group>

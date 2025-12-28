@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import DeeJayLabsLogo from './DeeJayLabsLogo';
 
@@ -15,6 +14,8 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const [recordTimer, setRecordTimer] = useState(0);
+    const [isFlashing, setIsFlashing] = useState(false);
+    const [isConnecting, setIsConnecting] = useState(false);
 
     const gameUrl = window.location.href;
     const shareText = stats
@@ -23,8 +24,9 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
 
     // Snapshot Logic
     useEffect(() => {
-        if (mode === 'SNAPSHOT' && !image) {
-            captureSnapshot();
+        if (mode === 'SNAPSHOT') {
+            setImage(null);
+            setTimeout(() => captureSnapshot(), 500); // Slight delay for UI transition
         }
     }, [mode]);
 
@@ -32,7 +34,11 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
         try {
             const canvas = document.querySelector('canvas');
             if (canvas) {
-                const data = canvas.toDataURL('image/jpeg', 0.9);
+                setIsFlashing(true);
+                setTimeout(() => setIsFlashing(false), 150);
+
+                // Create a flash sound effect or visual cue
+                const data = canvas.toDataURL('image/jpeg', 0.95);
                 setImage(data);
             }
         } catch (e) {
@@ -45,28 +51,59 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
         const canvas = document.querySelector('canvas');
         if (!canvas) return;
 
-        const stream = canvas.captureStream(30); // 30 FPS
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+        try {
+            // @ts-ignore - captureStream might not be in TS defs
+            const stream = canvas.captureStream(30); // 30 FPS
 
-        recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) setRecordedChunks((prev) => [...prev, e.data]);
-        };
+            const mimeTypes = [
+                'video/webm;codecs=vp9',
+                'video/webm;codecs=vp8',
+                'video/webm',
+                'video/mp4'
+            ];
 
-        recorder.onstop = () => {
-            // Processing happens in useEffect dependent on chunks
-        };
+            const selectedType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || '';
+            if (!selectedType) {
+                console.error("No supported video mime type found");
+                alert("Screen recording is not supported on this browser.");
+                return;
+            }
 
-        recorder.start();
-        mediaRecorderRef.current = recorder;
-        setRecording(true);
-        setRecordTimer(0);
-        setRecordedChunks([]); // clear previous
+            const recorder = new MediaRecorder(stream, { mimeType: selectedType });
+
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) setRecordedChunks((prev) => [...prev, e.data]);
+            };
+
+            recorder.onstop = () => {
+                // Logic handled in useEffect due to closure capture issues
+            };
+
+            recorder.start();
+            mediaRecorderRef.current = recorder;
+            setRecording(true);
+            setRecordTimer(0);
+            setRecordedChunks([]);
+            setVideoUrl(null);
+        } catch (err) {
+            console.error("Recording init failed:", err);
+            alert("Recording not supported on this device/browser context.");
+        }
     };
 
     const stopRecording = () => {
         mediaRecorderRef.current?.stop();
         setRecording(false);
     };
+
+    // Process Recording
+    useEffect(() => {
+        if (!recording && recordedChunks.length > 0) {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            setVideoUrl(url);
+        }
+    }, [recording, recordedChunks]);
 
     // Timer
     useEffect(() => {
@@ -76,15 +113,6 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
         }
         return () => clearInterval(interval);
     }, [recording]);
-
-    // Create Video Blob
-    useEffect(() => {
-        if (!recording && recordedChunks.length > 0) {
-            const blob = new Blob(recordedChunks, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            setVideoUrl(url);
-        }
-    }, [recording, recordedChunks]);
 
     const handleDownload = () => {
         const link = document.createElement('a');
@@ -109,110 +137,147 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
     };
 
     const openLiveDashboard = (platform: 'youtube' | 'twitch' | 'facebook' | 'youtube_sub') => {
-        let url = '';
-        switch (platform) {
-            case 'youtube': url = 'https://studio.youtube.com/channel/UC/livestreaming'; break;
-            case 'twitch': url = 'https://dashboard.twitch.tv/'; break;
-            case 'facebook': url = 'https://www.facebook.com/live/create/'; break;
-            case 'youtube_sub': url = 'https://www.youtube.com/@DeeJayLabs?sub_confirmation=1'; break;
-        }
-        window.open(url, '_blank');
+        setIsConnecting(true);
+        setTimeout(() => {
+            let url = '';
+            switch (platform) {
+                case 'youtube': url = 'https://studio.youtube.com/channel/UC/livestreaming'; break;
+                case 'twitch': url = 'https://dashboard.twitch.tv/'; break;
+                case 'facebook': url = 'https://www.facebook.com/live/create/'; break;
+                case 'youtube_sub': url = 'https://www.youtube.com/@DeeJayLabs?sub_confirmation=1'; break;
+            }
+            window.open(url, '_blank');
+            setIsConnecting(false);
+        }, 1500);
     };
 
     return (
-        <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-200" onClick={onClose}>
-            <div className="bg-[#0f0f0f] border border-white/10 rounded-[2.5rem] p-6 sm:p-8 max-w-sm w-full flex flex-col items-center shadow-2xl relative" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300" onClick={onClose}>
+            {/* Flash Effect */}
+            {isFlashing && <div className="fixed inset-0 bg-white z-[300] animate-out fade-out duration-300 pointer-events-none" />}
 
-                <button onClick={onClose} className="absolute top-6 right-6 w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/50 hover:bg-white/10 z-10">✕</button>
+            <div className="bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-6 sm:p-8 max-w-sm w-full flex flex-col items-center shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden" onClick={e => e.stopPropagation()}>
 
-                <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-6">Broadcast Station</h2>
+                {/* Decorative Elements */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent opacity-50" />
+                <button onClick={onClose} className="absolute top-6 right-6 w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/50 hover:bg-white/10 hover:text-white transition-all z-10">✕</button>
+
+                <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-6 drop-shadow-lg flex items-center gap-2">
+                    <span className="text-orange-500">●</span> Broadcast
+                </h2>
 
                 {/* TABS */}
-                <div className="flex bg-black/50 p-1 rounded-xl w-full mb-6">
+                <div className="flex bg-black/50 p-1.5 rounded-xl w-full mb-6 border border-white/5">
                     {(['SNAPSHOT', 'CLIP', 'LIVE'] as const).map(m => (
-                        <button key={m} onClick={() => setMode(m)} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${mode === m ? 'bg-orange-600 text-white shadow-lg' : 'text-white/30 hover:text-white'}`}>
+                        <button key={m} onClick={() => setMode(m)} className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${mode === m ? 'bg-orange-600 text-white shadow-lg scale-105' : 'text-white/30 hover:text-white hover:bg-white/5'}`}>
                             {m}
                         </button>
                     ))}
                 </div>
 
                 {/* CONTENT AREA */}
-                <div className="w-full aspect-video bg-black rounded-2xl mb-6 overflow-hidden border border-white/10 shadow-lg relative group flex items-center justify-center">
+                <div className="w-full aspect-video bg-black rounded-2xl mb-6 overflow-hidden border border-white/10 shadow-2xl relative group flex items-center justify-center">
+
+                    {/* Scanlines Overlay */}
+                    <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjEiIGZpbGw9ImJsYWNrIiBmaWxsLW9wYWNpdHk9IjAuMyIvPjwvc3ZnPg==')] opacity-30 pointer-events-none z-0" />
 
                     {mode === 'SNAPSHOT' && (
                         image ? (
                             <>
-                                <img src={image} alt="Snapshot" className="w-full h-full object-cover" />
-                                <div className="absolute bottom-2 right-2 opacity-50"><DeeJayLabsLogo className="scale-75" /></div>
+                                <img src={image} alt="Snapshot" className="w-full h-full object-cover z-10" />
+                                <div className="absolute bottom-2 right-2 opacity-50 z-20"><DeeJayLabsLogo className="scale-75" /></div>
+                                <div className="absolute top-2 left-2 px-2 py-1 bg-black/50 backdrop-blur rounded text-[9px] font-mono text-white/50 border border-white/10 z-20 shadow-lg">CAPTURED</div>
                             </>
-                        ) : <span className="text-white/20 text-xs italic">No Signal</span>
+                        ) : (
+                            <div className="flex flex-col items-center gap-2 z-10">
+                                <span className="animate-spin text-2xl opacity-30">↻</span>
+                                <span className="text-white/20 text-xs italic tracking-widest uppercase">Initializing Feed...</span>
+                            </div>
+                        )
                     )}
 
                     {mode === 'CLIP' && (
                         <>
                             {recording ? (
-                                <div className="flex flex-col items-center gap-2">
-                                    <div className="w-4 h-4 bg-red-600 rounded-full animate-pulse shadow-[0_0_15px_red]" />
-                                    <span className="text-red-500 font-mono text-sm font-bold">REC {recordTimer}s</span>
-                                    <div className="text-white/30 text-[9px] uppercase tracking-widest">Capturing Screen...</div>
+                                <div className="flex flex-col items-center gap-3 z-10 w-full h-full justify-center bg-black/80 backdrop-blur-sm animate-pulse-slow">
+                                    <div className="w-16 h-16 rounded-full border-4 border-red-600 flex items-center justify-center animate-pulse relative">
+                                        <div className="w-12 h-12 bg-red-600 rounded-full animate-ping opacity-20 absolute" />
+                                        <div className="w-6 h-6 bg-red-600 rounded-sm" />
+                                    </div>
+                                    <span className="text-red-500 font-mono text-xl font-bold tracking-widest">{recordTimer}s</span>
+                                    <div className="text-white/30 text-[9px] uppercase tracking-[0.2em] animate-pulse">Recording Feed</div>
                                 </div>
                             ) : videoUrl ? (
-                                <video src={videoUrl} controls className="w-full h-full object-cover" />
+                                <video src={videoUrl} controls loop autoPlay className="w-full h-full object-cover z-10" />
                             ) : (
-                                <div className="text-center">
-                                    <button onClick={startRecording} className="w-16 h-16 rounded-full bg-red-600/20 border-2 border-red-500 flex items-center justify-center hover:bg-red-600/40 transition-all group-hover:scale-110">
-                                        <div className="w-6 h-6 bg-red-500 rounded-full" />
+                                <div className="text-center z-10">
+                                    <button onClick={startRecording} className="w-20 h-20 rounded-full bg-red-600/10 border border-red-500/50 flex items-center justify-center hover:bg-red-600/30 transition-all group-hover:scale-110 shadow-[0_0_30px_rgba(220,38,38,0.2)]">
+                                        <div className="w-8 h-8 bg-red-600 rounded-full shadow-[0_0_15px_red] animate-pulse" />
                                     </button>
-                                    <div className="mt-2 text-white/30 text-[10px] uppercase tracking-widest">Start Clip</div>
+                                    <div className="mt-4 text-white/30 text-[10px] uppercase tracking-widest">Start Recording</div>
                                 </div>
                             )}
+
                             {recording && (
-                                <button onClick={stopRecording} className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white text-black px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider hover:scale-105 transition-transform">
-                                    Stop Log
+                                <button onClick={stopRecording} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white text-black px-6 py-2 rounded-full text-xs font-black uppercase tracking-wider hover:scale-105 transition-transform z-20 shadow-xl">
+                                    Stop Recording
+                                </button>
+                            )}
+
+                            {!recording && videoUrl && (
+                                <button onClick={() => setVideoUrl(null)} className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white/50 hover:bg-red-600 hover:text-white transition-all z-20 backdrop-blur-md">
+                                    ✕
                                 </button>
                             )}
                         </>
                     )}
 
                     {mode === 'LIVE' && (
-                        <div className="flex flex-col gap-3 items-center w-full px-8">
-                            <div className="text-white/40 text-[10px] uppercase font-bold text-center mb-2">Select Uplink Channel</div>
-                            <button onClick={() => openLiveDashboard('youtube')} className="w-full py-3 bg-[#FF0000] rounded-xl text-white font-black uppercase text-xs hover:scale-105 transition-transform flex items-center justify-center gap-2">
-                                <span>📺</span> YouTube Live
-                            </button>
-                            <button onClick={() => openLiveDashboard('twitch')} className="w-full py-3 bg-[#9146FF] rounded-xl text-white font-black uppercase text-xs hover:scale-105 transition-transform flex items-center justify-center gap-2">
-                                <span>👾</span> Twitch TV
-                            </button>
-                            <button onClick={() => openLiveDashboard('facebook')} className="w-full py-3 bg-[#1877F2] rounded-xl text-white font-black uppercase text-xs hover:scale-105 transition-transform flex items-center justify-center gap-2">
-                                <span>🔵</span> Facebook Live
-                            </button>
-                        </div>
+                        isConnecting ? (
+                            <div className="flex flex-col items-center gap-3 z-10">
+                                <div className="w-8 h-8 border-t-2 border-orange-500 rounded-full animate-spin" />
+                                <span className="text-orange-500 text-[10px] uppercase font-bold tracking-widest animate-pulse">Establishing Uplink...</span>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-3 items-center w-full px-8 z-10">
+                                <div className="text-white/40 text-[10px] uppercase font-bold text-center mb-2 tracking-widest">Select Provider</div>
+                                <button onClick={() => openLiveDashboard('youtube')} className="w-full py-3 bg-[#FF0000] rounded-xl text-white font-black uppercase text-xs hover:scale-105 hover:shadow-[0_0_20px_rgba(255,0,0,0.4)] transition-all flex items-center justify-center gap-2 group/btn">
+                                    <span className="text-lg">📺</span> YouTube Live
+                                </button>
+                                <button onClick={() => openLiveDashboard('twitch')} className="w-full py-3 bg-[#9146FF] rounded-xl text-white font-black uppercase text-xs hover:scale-105 hover:shadow-[0_0_20px_rgba(145,70,255,0.4)] transition-all flex items-center justify-center gap-2">
+                                    <span className="text-lg">👾</span> Twitch
+                                </button>
+                                <button onClick={() => openLiveDashboard('facebook')} className="w-full py-3 bg-[#1877F2] rounded-xl text-white font-black uppercase text-xs hover:scale-105 hover:shadow-[0_0_20px_rgba(24,119,242,0.4)] transition-all flex items-center justify-center gap-2">
+                                    <span className="text-lg">🔵</span> Facebook
+                                </button>
+                            </div>
+                        )
                     )}
                 </div>
 
                 {/* FOOTER ACTIONS */}
                 {mode !== 'LIVE' && (
-                    <div className="grid grid-cols-4 gap-3 w-full mb-6">
-                        <SocialButton icon="𝕏" color="bg-black border-white/20" onClick={() => handleShare('twitter')} />
-                        <SocialButton icon="fb" color="bg-blue-600" onClick={() => handleShare('facebook')} />
-                        <SocialButton icon="wz" color="bg-green-500" onClick={() => handleShare('whatsapp')} />
-                        <SocialButton icon="⬇" color="bg-orange-600" onClick={handleDownload} />
+                    <div className="grid grid-cols-4 gap-3 w-full mb-6 relative z-10">
+                        <SocialButton icon="𝕏" color="bg-black border border-white/20" onClick={() => handleShare('twitter')} />
+                        <SocialButton icon="fb" color="bg-[#1877F2]" onClick={() => handleShare('facebook')} />
+                        <SocialButton icon="wz" color="bg-[#25D366]" onClick={() => handleShare('whatsapp')} />
+                        <SocialButton icon="⬇" color="bg-orange-600 shadow-[0_0_15px_rgba(234,88,12,0.4)]" onClick={handleDownload} />
                     </div>
                 )}
 
-                {mode === 'LIVE' && (
-                    <div className="w-full mb-4">
-                        <button onClick={() => openLiveDashboard('youtube_sub')} className="w-full py-3 border border-white/10 bg-white/5 rounded-xl text-white/60 font-black uppercase text-[10px] tracking-widest hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center gap-2">
-                            <span>🔔</span> Subscribe for Drops
+                {mode === 'LIVE' && !isConnecting && (
+                    <div className="w-full mb-4 relative z-10">
+                        <button onClick={() => openLiveDashboard('youtube_sub')} className="w-full py-3 border border-white/10 bg-white/5 rounded-xl text-white/60 font-black uppercase text-[10px] tracking-widest hover:bg-white/10 hover:text-white hover:border-white/30 transition-all flex items-center justify-center gap-2 group/sub">
+                            <span className="group-hover/sub:animate-bounce">🔔</span> <span className="opacity-80 group-hover/sub:opacity-100">Subscribe for Drops</span>
                         </button>
                     </div>
                 )}
 
-                <p className="text-[10px] text-white/30 text-center px-4 leading-relaxed italic">
-                    {mode === 'LIVE' ? "Initiate direct uplink to external streaming providers. Latency may vary." : "Share your survival log with the network. Visuals must be saved manually."}
+                <p className="text-[10px] text-white/30 text-center px-4 leading-relaxed italic z-10">
+                    {mode === 'LIVE' ? "Initiating direct uplink protocol. Ensure streaming software is active locally." : "Encrypted logs ready for transmission. Visual data must be saved locally."}
                 </p>
 
-                <div className="mt-6 opacity-40">
+                <div className="mt-6 opacity-30 grayscale hover:grayscale-0 transition-all duration-500">
                     <DeeJayLabsLogo className="scale-75" />
                 </div>
             </div>
@@ -223,7 +288,7 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
 const SocialButton: React.FC<{ icon: string, color: string, onClick: () => void }> = ({ icon, color, onClick }) => (
     <button
         onClick={onClick}
-        className={`aspect-square rounded-2xl flex items-center justify-center text-white font-black text-lg hover:scale-110 active:scale-95 transition-all shadow-lg ${color}`}
+        className={`aspect-square rounded-2xl flex items-center justify-center text-white font-black text-lg hover:scale-110 active:scale-95 transition-all shadow-lg hover:shadow-2xl ${color}`}
     >
         {icon}
     </button>

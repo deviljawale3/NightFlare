@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 import { GameState, TimeOfDay, IslandTheme, NightEvent, GameSettings, EnemyClass } from './types';
+import {
+  createTournamentBracket,
+  advanceTournamentRound,
+  calculateWinRate,
+  calculatePeakTime,
+  createNewSeason,
+  checkSeasonEnd,
+  mockWebSocketConnection
+} from './phase3Logic';
 
 interface GameStore {
   gameState: GameState;
@@ -67,6 +76,47 @@ interface GameStore {
   lastLifeRegen: number;
   useLife: () => boolean;
   checkLifeRegen: () => void;
+  // Challenge Mode
+  challengeState?: import('./types').ChallengeState;
+  startChallenge: (opponentId: string, wager: number, mode?: import('./types').ChallengeMode) => void;
+  updateChallenge: () => void;
+  endChallenge: (victory: boolean) => void;
+  // Phase 2: Battle History & Stats
+  battleHistory: import('./types').BattleRecord[];
+  arenaStats: import('./types').ArenaStats;
+  addBattleRecord: (record: import('./types').BattleRecord) => void;
+  updateArenaStats: (result: 'VICTORY' | 'DEFEAT' | 'DRAW', winnings: number) => void;
+  calculateRank: () => import('./types').PlayerRank;
+  // Phase 3: Tournament System
+  tournaments: import('./types').Tournament[];
+  activeTournament?: import('./types').Tournament;
+  createTournament: (name: string, entryFee: number, maxPlayers: number) => void;
+  joinTournament: (tournamentId: string) => boolean;
+  advanceTournament: (tournamentId: string) => void;
+  // Phase 3: Friend System
+  friends: import('./types').Friend[];
+  friendRequests: import('./types').FriendRequest[];
+  directChallenges: import('./types').DirectChallenge[];
+  addFriend: (friendId: string) => void;
+  removeFriend: (friendId: string) => void;
+  sendFriendRequest: (targetId: string, targetName: string, targetAvatar: string) => void;
+  acceptFriendRequest: (requestId: string) => void;
+  sendDirectChallenge: (friendId: string, wager: number, mode: import('./types').ChallengeMode) => void;
+  acceptDirectChallenge: (challengeId: string) => void;
+  // Phase 3: Seasonal System
+  currentSeason?: import('./types').Season;
+  seasonHistory: import('./types').Season[];
+  initializeSeason: () => void;
+  endSeason: () => void;
+  claimSeasonRewards: () => void;
+  // Phase 3: Analytics
+  analytics: import('./types').PlayerAnalytics;
+  updateAnalytics: () => void;
+  // Phase 3: Multiplayer
+  multiplayerState: import('./types').MultiplayerState;
+  toggleMultiplayer: (enabled: boolean) => void;
+  connectToServer: () => Promise<void>;
+  disconnectFromServer: () => void;
 }
 
 const STORAGE_KEY = 'nightflare_save_v7';
@@ -118,6 +168,87 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   lives: Number(localStorage.getItem('nightflare_lives')) || 3,
   lastLifeRegen: Number(localStorage.getItem('nightflare_life_regen')) || Date.now(),
+
+  // Phase 2: Battle History & Stats
+  battleHistory: (() => {
+    const stored = localStorage.getItem('nightflare_battle_history');
+    return stored ? JSON.parse(stored) : [];
+  })(),
+
+  arenaStats: (() => {
+    const stored = localStorage.getItem('nightflare_arena_stats');
+    return stored ? JSON.parse(stored) : {
+      totalBattles: 0,
+      wins: 0,
+      losses: 0,
+      draws: 0,
+      totalWagered: 0,
+      totalWinnings: 0,
+      netProfit: 0,
+      winStreak: 0,
+      bestStreak: 0,
+      rank: 'BRONZE' as import('./types').PlayerRank,
+      rankPoints: 0,
+      titles: []
+    };
+  })(),
+
+  // Phase 3: Tournaments
+  tournaments: (() => {
+    const stored = localStorage.getItem('nightflare_tournaments');
+    return stored ? JSON.parse(stored) : [];
+  })(),
+
+  // Phase 3: Friends
+  friends: (() => {
+    const stored = localStorage.getItem('nightflare_friends');
+    return stored ? JSON.parse(stored) : [];
+  })(),
+
+  friendRequests: (() => {
+    const stored = localStorage.getItem('nightflare_friend_requests');
+    return stored ? JSON.parse(stored) : [];
+  })(),
+
+  directChallenges: (() => {
+    const stored = localStorage.getItem('nightflare_direct_challenges');
+    return stored ? JSON.parse(stored) : [];
+  })(),
+
+  // Phase 3: Seasons
+  currentSeason: (() => {
+    const stored = localStorage.getItem('nightflare_current_season');
+    if (stored) return JSON.parse(stored);
+    return createNewSeason(1);
+  })(),
+
+  seasonHistory: (() => {
+    const stored = localStorage.getItem('nightflare_season_history');
+    return stored ? JSON.parse(stored) : [];
+  })(),
+
+  // Phase 3: Analytics
+  analytics: (() => {
+    const stored = localStorage.getItem('nightflare_analytics');
+    return stored ? JSON.parse(stored) : {
+      winRateByMode: { SCORE_RUSH: 0, SUDDEN_DEATH: 0 },
+      averageScore: 0,
+      averageDuration: 0,
+      bestOpponent: '',
+      worstOpponent: '',
+      peakPerformanceTime: 'Unknown',
+      recentForm: [],
+      scoreHistory: [],
+      rankHistory: []
+    };
+  })(),
+
+  // Phase 3: Multiplayer
+  multiplayerState: {
+    enabled: false,
+    connectionStatus: 'DISCONNECTED' as const,
+    opponentConnected: false
+  },
 
   checkLifeRegen: () => {
     const { lives, lastLifeRegen } = get();
@@ -572,5 +703,447 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newBoard = [...state.leaderboard, entry].sort((a, b) => b.score - a.score).slice(0, 10);
     localStorage.setItem('nightflare_leaderboard', JSON.stringify(newBoard));
     return { leaderboard: newBoard };
-  })
+  }),
+
+  // CHALLENGE LOGIC
+  startChallenge: (opponentId, wager, mode = 'SCORE_RUSH') => {
+    const { resources, leaderboard, consumeResource } = get();
+    // 1. Check Funds
+    if (resources.lightShards < wager) {
+      alert("Insufficient Light Shards for this wager!");
+      return;
+    }
+
+    // 2. Find opponent details (Mock logic)
+    const opponent = leaderboard.find(l => l.id === opponentId) || { id: opponentId, name: 'Unknown', avatar: '💀', score: 0 };
+
+    if (consumeResource('lightShards', wager)) {
+      const duration = mode === 'SCORE_RUSH' ? 180 : 0; // 3 min for Score Rush, unlimited for Sudden Death
+
+      set({
+        challengeState: {
+          isActive: true,
+          mode,
+          opponent: {
+            id: opponent.id,
+            name: opponent.name,
+            avatar: opponent.avatar,
+            score: 0,
+            health: 100,
+            difficultyMultiplier: 1.0 + (Math.random() * 0.5) // Random skill level 1.0 - 1.5x
+          },
+          wager,
+          startTime: Date.now(),
+          duration,
+        },
+        // Start Game Immediately
+        gameState: GameState.PLAYING,
+        score: 0,
+        levelTimer: duration,
+        wave: 5, // Start at higher intensity
+        timeOfDay: TimeOfDay.NIGHT
+      });
+    }
+  },
+
+  updateChallenge: () => set((state) => {
+    if (!state.challengeState || !state.challengeState.isActive) return {};
+
+    const now = Date.now();
+    const elapsed = (now - state.challengeState.startTime) / 1000;
+
+    // Check Time Limit (Score Rush only)
+    if (state.challengeState.mode === 'SCORE_RUSH' && elapsed >= state.challengeState.duration) {
+      get().endChallenge(state.score > state.challengeState.opponent.score);
+      return { gameState: GameState.GAME_OVER };
+    }
+
+    // Simulate Opponent Score
+    const currentOppScore = state.challengeState.opponent.score;
+    const pointsGain = (Math.random() * 50) * state.challengeState.opponent.difficultyMultiplier;
+
+    // Occasional big kill
+    const bigKill = Math.random() < 0.05 ? 500 : 0;
+
+    // Simulate opponent health loss in Sudden Death
+    let oppHealth = state.challengeState.opponent.health;
+    if (state.challengeState.mode === 'SUDDEN_DEATH') {
+      // Opponent takes damage randomly
+      if (Math.random() < 0.02) { // 2% chance per second
+        oppHealth = Math.max(0, oppHealth - (Math.random() * 15));
+        if (oppHealth <= 0) {
+          get().endChallenge(true); // Player wins if opponent dies
+          return { gameState: GameState.GAME_OVER };
+        }
+      }
+    }
+
+    return {
+      challengeState: {
+        ...state.challengeState,
+        opponent: {
+          ...state.challengeState.opponent,
+          score: currentOppScore + pointsGain + bigKill,
+          health: oppHealth
+        }
+      }
+    };
+  }),
+
+  endChallenge: (victory) => {
+    const { challengeState, addResource, addBattleRecord, updateArenaStats } = get();
+    if (!challengeState) return;
+
+    const now = Date.now();
+    const battleDuration = Math.floor((now - challengeState.startTime) / 1000);
+
+    if (victory) {
+      const totalPot = challengeState.wager * 2;
+      const tax = totalPot * 0.10; // 10% House Cut
+      const winnings = totalPot - tax;
+      const netProfit = winnings - challengeState.wager;
+
+      addResource('lightShards', winnings);
+
+      // Record battle
+      addBattleRecord({
+        id: now.toString(),
+        date: now,
+        mode: challengeState.mode,
+        opponentName: challengeState.opponent.name,
+        opponentAvatar: challengeState.opponent.avatar,
+        playerScore: get().score,
+        opponentScore: Math.floor(challengeState.opponent.score),
+        wager: challengeState.wager,
+        result: 'VICTORY',
+        winnings: netProfit,
+        duration: battleDuration
+      });
+
+      updateArenaStats('VICTORY', netProfit);
+
+      alert(`🏆 VICTORY!\n\nTotal Pot: ${totalPot}\nHouse Tax (10%): -${tax}\nNet Profit: +${netProfit} Shards`);
+
+      set((state) => ({
+        challengeState: { ...state.challengeState!, isActive: false, result: 'VICTORY' }
+      }));
+    } else {
+      const netLoss = -challengeState.wager;
+
+      // Record battle
+      addBattleRecord({
+        id: now.toString(),
+        date: now,
+        mode: challengeState.mode,
+        opponentName: challengeState.opponent.name,
+        opponentAvatar: challengeState.opponent.avatar,
+        playerScore: get().score,
+        opponentScore: Math.floor(challengeState.opponent.score),
+        wager: challengeState.wager,
+        result: 'DEFEAT',
+        winnings: netLoss,
+        duration: battleDuration
+      });
+
+      updateArenaStats('DEFEAT', netLoss);
+
+      alert(`💀 DEFEAT\n\n${challengeState.opponent.name} scored higher.\nYou lost ${challengeState.wager} Shards.`);
+
+      set((state) => ({
+        challengeState: { ...state.challengeState!, isActive: false, result: 'DEFEAT' }
+      }));
+    }
+  },
+
+  // PHASE 2 METHODS
+  addBattleRecord: (record) => set((state) => {
+    const newHistory = [record, ...state.battleHistory].slice(0, 50); // Keep last 50
+    localStorage.setItem('nightflare_battle_history', JSON.stringify(newHistory));
+    return { battleHistory: newHistory };
+  }),
+
+  updateArenaStats: (result, winnings) => set((state) => {
+    const stats = { ...state.arenaStats };
+
+    stats.totalBattles++;
+    if (result === 'VICTORY') {
+      stats.wins++;
+      stats.winStreak++;
+      stats.bestStreak = Math.max(stats.bestStreak, stats.winStreak);
+    } else if (result === 'DEFEAT') {
+      stats.losses++;
+      stats.winStreak = 0;
+    } else {
+      stats.draws++;
+    }
+
+    stats.totalWinnings += Math.max(0, winnings);
+    stats.totalWagered += Math.abs(winnings);
+    stats.netProfit += winnings;
+
+    // Update rank points (ELO-style)
+    const pointChange = result === 'VICTORY' ? 25 : (result === 'DEFEAT' ? -15 : 0);
+    stats.rankPoints = Math.max(0, stats.rankPoints + pointChange);
+
+    // Calculate new rank
+    stats.rank = get().calculateRank();
+
+    // Award titles
+    if (stats.wins >= 10 && !stats.titles.includes('Veteran')) stats.titles.push('Veteran');
+    if (stats.bestStreak >= 5 && !stats.titles.includes('Unstoppable')) stats.titles.push('Unstoppable');
+    if (stats.netProfit >= 10000 && !stats.titles.includes('High Roller')) stats.titles.push('High Roller');
+    if (stats.wins >= 50 && !stats.titles.includes('Champion')) stats.titles.push('Champion');
+
+    localStorage.setItem('nightflare_arena_stats', JSON.stringify(stats));
+    return { arenaStats: stats };
+  }),
+
+  calculateRank: () => {
+    const { arenaStats } = get();
+    const points = arenaStats.rankPoints;
+
+    if (points >= 1000) return 'LEGEND';
+    if (points >= 750) return 'DIAMOND';
+    if (points >= 500) return 'PLATINUM';
+    if (points >= 250) return 'GOLD';
+    if (points >= 100) return 'SILVER';
+    return 'BRONZE';
+  },
+
+  // PHASE 3 METHODS
+  createTournament: (name, entryFee, maxPlayers) => set((state) => {
+    const newTournament: import('./types').Tournament = {
+      id: `tournament-${Date.now()}`,
+      name,
+      status: 'UPCOMING',
+      entryFee,
+      prizePool: 0,
+      maxPlayers,
+      currentPlayers: 0,
+      startTime: Date.now() + 300000,
+      bracket: [],
+      participants: [],
+      rewards: [
+        { placement: 1, shards: entryFee * maxPlayers * 0.5, title: `${name} Champion` },
+        { placement: 2, shards: entryFee * maxPlayers * 0.3 },
+        { placement: 3, shards: entryFee * maxPlayers * 0.2 }
+      ]
+    };
+    const newTournaments = [...state.tournaments, newTournament];
+    localStorage.setItem('nightflare_tournaments', JSON.stringify(newTournaments));
+    return { tournaments: newTournaments };
+  }),
+
+  joinTournament: (tournamentId) => {
+    const { tournaments, resources, consumeResource, userProfile } = get();
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    if (!tournament || tournament.currentPlayers >= tournament.maxPlayers || resources.lightShards < tournament.entryFee) return false;
+    if (consumeResource('lightShards', tournament.entryFee)) {
+      const participant: import('./types').TournamentParticipant = {
+        id: 'player',
+        name: userProfile.name,
+        avatar: userProfile.avatar,
+        seed: tournament.currentPlayers + 1,
+        eliminated: false
+      };
+      const updatedTournament = {
+        ...tournament,
+        currentPlayers: tournament.currentPlayers + 1,
+        prizePool: tournament.prizePool + tournament.entryFee,
+        participants: [...tournament.participants, participant]
+      };
+      if (updatedTournament.currentPlayers === updatedTournament.maxPlayers) {
+        updatedTournament.status = 'ACTIVE';
+        updatedTournament.bracket = createTournamentBracket(updatedTournament.participants);
+      }
+      set((state) => {
+        const newTournaments = state.tournaments.map(t => t.id === tournamentId ? updatedTournament : t);
+        localStorage.setItem('nightflare_tournaments', JSON.stringify(newTournaments));
+        return { tournaments: newTournaments };
+      });
+      return true;
+    }
+    return false;
+  },
+
+  advanceTournament: (tournamentId) => set((state) => {
+    const tournament = state.tournaments.find(t => t.id === tournamentId);
+    if (!tournament) return {};
+    const advanced = advanceTournamentRound(tournament);
+    const newTournaments = state.tournaments.map(t => t.id === tournamentId ? advanced : t);
+    localStorage.setItem('nightflare_tournaments', JSON.stringify(newTournaments));
+    return { tournaments: newTournaments };
+  }),
+
+  addFriend: (friendId) => set((state) => {
+    const newFriend: import('./types').Friend = {
+      id: friendId,
+      name: `Player ${friendId.slice(0, 4)}`,
+      avatar: '🎮',
+      status: Math.random() > 0.5 ? 'ONLINE' : 'OFFLINE',
+      rank: 'SILVER',
+      lastSeen: Date.now(),
+      wins: Math.floor(Math.random() * 50),
+      losses: Math.floor(Math.random() * 30)
+    };
+    const newFriends = [...state.friends, newFriend];
+    localStorage.setItem('nightflare_friends', JSON.stringify(newFriends));
+    return { friends: newFriends };
+  }),
+
+  removeFriend: (friendId) => set((state) => {
+    const newFriends = state.friends.filter(f => f.id !== friendId);
+    localStorage.setItem('nightflare_friends', JSON.stringify(newFriends));
+    return { friends: newFriends };
+  }),
+
+  sendFriendRequest: (targetId, targetName, targetAvatar) => set((state) => {
+    const request: import('./types').FriendRequest = {
+      id: `req-${Date.now()}`,
+      fromId: 'player',
+      fromName: state.userProfile.name,
+      fromAvatar: state.userProfile.avatar,
+      timestamp: Date.now(),
+      status: 'PENDING'
+    };
+    const newRequests = [...state.friendRequests, request];
+    localStorage.setItem('nightflare_friend_requests', JSON.stringify(newRequests));
+    return { friendRequests: newRequests };
+  }),
+
+  acceptFriendRequest: (requestId) => {
+    const { friendRequests, addFriend } = get();
+    const request = friendRequests.find(r => r.id === requestId);
+    if (request && request.status === 'PENDING') {
+      addFriend(request.fromId);
+      set((state) => {
+        const newRequests = state.friendRequests.map(r => r.id === requestId ? { ...r, status: 'ACCEPTED' as const } : r);
+        localStorage.setItem('nightflare_friend_requests', JSON.stringify(newRequests));
+        return { friendRequests: newRequests };
+      });
+    }
+  },
+
+  sendDirectChallenge: (friendId, wager, mode) => set((state) => {
+    const friend = state.friends.find(f => f.id === friendId);
+    if (!friend) return {};
+    const challenge: import('./types').DirectChallenge = {
+      id: `challenge-${Date.now()}`,
+      fromId: 'player',
+      fromName: state.userProfile.name,
+      fromAvatar: state.userProfile.avatar,
+      toId: friendId,
+      toName: friend.name,
+      wager,
+      mode,
+      timestamp: Date.now(),
+      status: 'PENDING',
+      expiresAt: Date.now() + 300000
+    };
+    const newChallenges = [...state.directChallenges, challenge];
+    localStorage.setItem('nightflare_direct_challenges', JSON.stringify(newChallenges));
+    return { directChallenges: newChallenges };
+  }),
+
+  acceptDirectChallenge: (challengeId) => {
+    const { directChallenges, startChallenge } = get();
+    const challenge = directChallenges.find(c => c.id === challengeId);
+    if (challenge && challenge.status === 'PENDING') {
+      startChallenge(challenge.fromId, challenge.wager, challenge.mode);
+      set((state) => {
+        const newChallenges = state.directChallenges.map(c => c.id === challengeId ? { ...c, status: 'ACCEPTED' as const } : c);
+        localStorage.setItem('nightflare_direct_challenges', JSON.stringify(newChallenges));
+        return { directChallenges: newChallenges };
+      });
+    }
+  },
+
+  initializeSeason: () => {
+    const { currentSeason, seasonHistory } = get();
+    if (currentSeason && checkSeasonEnd(currentSeason)) {
+      get().endSeason();
+    }
+    const newSeasonNumber = seasonHistory.length + 1;
+    const newSeason = createNewSeason(newSeasonNumber);
+    set({ currentSeason: newSeason });
+    localStorage.setItem('nightflare_current_season', JSON.stringify(newSeason));
+  },
+
+  endSeason: () => {
+    const { currentSeason } = get();
+    if (!currentSeason) return;
+    const endedSeason = { ...currentSeason, status: 'ENDED' as const, endDate: Date.now() };
+    set((state) => {
+      const newHistory = [...state.seasonHistory, endedSeason];
+      localStorage.setItem('nightflare_season_history', JSON.stringify(newHistory));
+      return { seasonHistory: newHistory, currentSeason: undefined };
+    });
+    setTimeout(() => get().initializeSeason(), 1000);
+  },
+
+  claimSeasonRewards: () => {
+    const { currentSeason, arenaStats, addResource } = get();
+    if (!currentSeason || currentSeason.status !== 'ENDED') return;
+    const reward = currentSeason.rewards.find(r => r.rankThreshold === arenaStats.rank);
+    if (reward) {
+      addResource('lightShards', reward.shards);
+      if (reward.title && !arenaStats.titles.includes(reward.title)) {
+        set((state) => ({
+          arenaStats: { ...state.arenaStats, titles: [...state.arenaStats.titles, reward.title!] }
+        }));
+      }
+      alert(`Season Rewards Claimed!\n+${reward.shards} Light Shards\n${reward.title ? `Title: ${reward.title}` : ''}`);
+    }
+  },
+
+  updateAnalytics: () => set((state) => {
+    const { battleHistory, arenaStats } = state;
+    if (battleHistory.length === 0) return {};
+    const scoreRushBattles = battleHistory.filter(b => b.mode === 'SCORE_RUSH');
+    const suddenDeathBattles = battleHistory.filter(b => b.mode === 'SUDDEN_DEATH');
+    const scoreRushWins = scoreRushBattles.filter(b => b.result === 'VICTORY').length;
+    const suddenDeathWins = suddenDeathBattles.filter(b => b.result === 'VICTORY').length;
+    const winRateByMode = {
+      SCORE_RUSH: calculateWinRate(scoreRushWins, scoreRushBattles.length),
+      SUDDEN_DEATH: calculateWinRate(suddenDeathWins, suddenDeathBattles.length)
+    };
+    const totalScore = battleHistory.reduce((sum, b) => sum + b.playerScore, 0);
+    const totalDuration = battleHistory.reduce((sum, b) => sum + b.duration, 0);
+    const averageScore = Math.floor(totalScore / battleHistory.length);
+    const averageDuration = Math.floor(totalDuration / battleHistory.length);
+    const opponentStats = new Map<string, { wins: number; total: number }>();
+    battleHistory.forEach(b => {
+      const current = opponentStats.get(b.opponentName) || { wins: 0, total: 0 };
+      opponentStats.set(b.opponentName, { wins: current.wins + (b.result === 'VICTORY' ? 1 : 0), total: current.total + 1 });
+    });
+    let bestOpponent = '', worstOpponent = '';
+    let bestWinRate = 0, worstWinRate = 1;
+    opponentStats.forEach((stats, name) => {
+      const winRate = stats.wins / stats.total;
+      if (winRate > bestWinRate) { bestWinRate = winRate; bestOpponent = name; }
+      if (winRate < worstWinRate) { worstWinRate = winRate; worstOpponent = name; }
+    });
+    const recentForm = battleHistory.slice(0, 10).map(b => b.result === 'VICTORY' ? 'W' as const : b.result === 'DEFEAT' ? 'L' as const : 'D' as const);
+    const scoreHistory = battleHistory.slice(0, 20).reverse().map(b => ({ date: b.date, score: b.playerScore }));
+    const rankHistory = [{ date: Date.now() - 7 * 24 * 60 * 60 * 1000, rank: 'BRONZE' as const, points: 0 }, { date: Date.now(), rank: arenaStats.rank, points: arenaStats.rankPoints }];
+    const newAnalytics = { winRateByMode, averageScore, averageDuration, bestOpponent, worstOpponent, peakPerformanceTime: calculatePeakTime(battleHistory), recentForm, scoreHistory, rankHistory };
+    localStorage.setItem('nightflare_analytics', JSON.stringify(newAnalytics));
+    return { analytics: newAnalytics };
+  }),
+
+  toggleMultiplayer: (enabled) => set((state) => ({ multiplayerState: { ...state.multiplayerState, enabled } })),
+
+  connectToServer: async () => {
+    set((state) => ({ multiplayerState: { ...state.multiplayerState, connectionStatus: 'CONNECTING' } }));
+    try {
+      await mockWebSocketConnection();
+      set((state) => ({ multiplayerState: { ...state.multiplayerState, connectionStatus: 'CONNECTED', playerId: `player-${Date.now()}` } }));
+      alert('Connected to multiplayer server!');
+    } catch (error) {
+      set((state) => ({ multiplayerState: { ...state.multiplayerState, connectionStatus: 'ERROR' } }));
+      alert('Failed to connect to server. Please try again.');
+    }
+  },
+
+  disconnectFromServer: () => set((state) => ({ multiplayerState: { enabled: state.multiplayerState.enabled, connectionStatus: 'DISCONNECTED', opponentConnected: false } })),
 }));

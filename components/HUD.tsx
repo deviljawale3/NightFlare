@@ -14,16 +14,32 @@ const Joystick: React.FC = React.memo(() => {
   const [active, setActive] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const baseRef = useRef<HTMLDivElement>(null);
+  const rectRef = useRef<DOMRect | null>(null);
+
+  const handleStart = (e: React.PointerEvent) => {
+    if (!baseRef.current) return;
+    rectRef.current = baseRef.current.getBoundingClientRect();
+    setActive(true);
+    (e.target as Element).setPointerCapture(e.pointerId);
+    handleMove(e.clientX, e.clientY);
+  };
 
   const handleMove = (clientX: number, clientY: number) => {
-    if (!baseRef.current) return;
-    const rect = baseRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
+    if (!rectRef.current) return;
+
+    // Use cached rect
+    const width = rectRef.current.width;
+    const height = rectRef.current.height;
+    const centerX = rectRef.current.left + width / 2;
+    const centerY = rectRef.current.top + height / 2;
+
     const dX = clientX - centerX;
     const dY = clientY - centerY;
     const dist = Math.sqrt(dX ** 2 + dY ** 2) || 0.001;
-    const maxDist = window.innerWidth < 640 ? 45 : 65;
+
+    // Slightly larger max dist for smoother feel
+    const maxDist = window.innerWidth < 640 ? 50 : 70;
+
     const scale = Math.min(dist, maxDist) / dist;
     const limitedX = dX * scale;
     const limitedY = dY * scale;
@@ -38,6 +54,7 @@ const Joystick: React.FC = React.memo(() => {
   const handleEnd = () => {
     setActive(false);
     setPos({ x: 0, y: 0 });
+    rectRef.current = null;
     (window as any).joystickX = 0;
     (window as any).joystickY = 0;
   };
@@ -46,18 +63,14 @@ const Joystick: React.FC = React.memo(() => {
     <div className="flex flex-col items-center">
       <div
         ref={baseRef}
-        className="w-28 h-28 sm:w-44 sm:h-44 rounded-full border border-white/10 bg-black/40 pointer-events-auto touch-none flex items-center justify-center shadow-inner"
-        onPointerDown={e => {
-          setActive(true);
-          (e.target as Element).setPointerCapture(e.pointerId);
-          handleMove(e.clientX, e.clientY);
-        }}
+        className="w-32 h-32 sm:w-44 sm:h-44 rounded-full border border-white/10 bg-black/40 pointer-events-auto touch-none flex items-center justify-center shadow-inner"
+        onPointerDown={handleStart}
         onPointerMove={e => { if (active) handleMove(e.clientX, e.clientY); }}
         onPointerUp={e => { (e.target as Element).releasePointerCapture(e.pointerId); handleEnd(); }}
         onPointerCancel={handleEnd}
       >
         <div
-          className="w-12 h-12 sm:w-20 sm:h-20 rounded-full bg-white/15 backdrop-blur-md border border-white/20 shadow-2xl pointer-events-none"
+          className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-white/15 backdrop-blur-md border border-white/20 shadow-2xl pointer-events-none transition-transform duration-75"
           style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
         />
       </div>
@@ -66,7 +79,7 @@ const Joystick: React.FC = React.memo(() => {
 });
 
 const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
-  const { resources, playerStats, nightflareHealth, level, levelTimer, chatMessages, setGameState, triggerNova, isPlayerGrounded, wave, score } = useGameStore(
+  const { resources, playerStats, nightflareHealth, level, levelTimer, chatMessages, setGameState, triggerNova, isPlayerGrounded, wave, score, challengeState } = useGameStore(
     // Selector for perf optimization: only re-render on specific changes
     (state) => ({
       resources: state.resources,
@@ -80,6 +93,7 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
       isPlayerGrounded: state.isPlayerGrounded,
       wave: state.wave,
       score: state.score,
+      challengeState: state.challengeState,
     })
   );
 
@@ -154,26 +168,67 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
           </div>
         </div>
 
-        {/* TOP CENTER: TIMER & LEVEL */}
+        {/* TOP CENTER: TIMER & LEVEL OR CHALLENGE STATUS */}
         <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none top-0">
-          <div className="bg-black/50 backdrop-blur-md px-4 sm:px-10 py-2 sm:py-3 rounded-[2rem] border border-white/10 text-center shadow-2xl">
-            <div className="text-[8px] sm:text-[11px] font-black text-orange-500 uppercase tracking-[0.3em] italic mb-0.5 sm:mb-1 whitespace-nowrap">Survive Level {level}</div>
-            <div className="text-xl sm:text-4xl font-black text-white tracking-tighter tabular-nums leading-none">
-              {formatTime(levelTimer)}
+          {challengeState?.isActive ? (
+            // CHALLENGE MODE UI
+            <div className="bg-black/80 backdrop-blur-md px-6 sm:px-10 py-3 sm:py-4 rounded-[2rem] border border-red-500/30 text-center shadow-2xl min-w-[280px] sm:min-w-[400px]">
+              <div className="text-[8px] sm:text-[10px] font-black text-red-500 uppercase tracking-[0.3em] italic mb-2 whitespace-nowrap flex items-center justify-center gap-2">
+                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                SHADOW DUEL
+              </div>
+
+              {/* Score Comparison */}
+              <div className="flex items-center justify-between gap-4 mb-2">
+                <div className="flex flex-col items-center">
+                  <div className="text-white/50 text-[8px] uppercase font-bold mb-1">You</div>
+                  <div className="text-green-400 text-lg sm:text-2xl font-black tabular-nums">{score}</div>
+                </div>
+
+                <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden relative mx-4">
+                  <div
+                    className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
+                    style={{ width: `${Math.min(100, (score / (score + challengeState.opponent.score)) * 100)}%` }}
+                  />
+                </div>
+
+                <div className="flex flex-col items-center">
+                  <div className="text-white/50 text-[8px] uppercase font-bold mb-1">{challengeState.opponent.name}</div>
+                  <div className="text-red-400 text-lg sm:text-2xl font-black tabular-nums">{Math.floor(challengeState.opponent.score)}</div>
+                </div>
+              </div>
+
+              <div className="text-white/30 text-[9px] font-mono tabular-nums">{formatTime(levelTimer)} remaining</div>
             </div>
-          </div>
+          ) : (
+            // NORMAL MODE UI
+            <div className="bg-black/50 backdrop-blur-md px-4 sm:px-10 py-2 sm:py-3 rounded-[2rem] border border-white/10 text-center shadow-2xl">
+              <div className="text-[8px] sm:text-[11px] font-black text-orange-500 uppercase tracking-[0.3em] italic mb-0.5 sm:mb-1 whitespace-nowrap">Survive Level {level}</div>
+              <div className="text-xl sm:text-4xl font-black text-white tracking-tighter tabular-nums leading-none">
+                {formatTime(levelTimer)}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* TOP RIGHT: RESOURCES & PAUSE */}
         <div className="flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto">
-          <div className="bg-black/60 backdrop-blur-xl px-3 py-1.5 sm:px-6 sm:py-3 rounded-2xl border border-white/10 flex gap-3 sm:gap-8 shadow-2xl">
-            <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="bg-black/60 backdrop-blur-xl px-3 py-2 rounded-2xl border border-white/10 flex flex-wrap justify-end gap-x-4 gap-y-1 shadow-2xl max-w-[160px] sm:max-w-none">
+            <div className="flex items-center gap-1.5">
               <span className="text-sm sm:text-2xl">🪵</span>
               <span className="text-xs sm:text-lg font-black text-white">{resources.wood}</span>
             </div>
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1.5">
               <span className="text-sm sm:text-2xl">🪨</span>
               <span className="text-xs sm:text-lg font-black text-white">{resources.stone}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm sm:text-2xl">🍎</span>
+              <span className="text-xs sm:text-lg font-black text-white">{resources.food}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm sm:text-2xl">✨</span>
+              <span className="text-xs sm:text-lg font-black text-white">{resources.lightShards}</span>
             </div>
           </div>
 

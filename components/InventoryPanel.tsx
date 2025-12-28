@@ -9,7 +9,7 @@ const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md z-[70] pointer-events-auto p-4" onClick={onClose}>
       <div className="bg-slate-900 border border-white/10 p-6 md:p-10 rounded-[2.5rem] md:rounded-[3rem] max-w-xl w-full shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col" onClick={e => e.stopPropagation()}>
-        
+
         <div className="flex justify-between items-start mb-8">
           <div>
             <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase">Inventory</h2>
@@ -28,7 +28,7 @@ const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <ResourceItem label="Lumber" value={resources.wood} icon="🪵" color="text-amber-500" />
               <ResourceItem label="Granite" value={resources.stone} icon="🪨" color="text-slate-400" />
               <ResourceItem label="Star Shards" value={resources.lightShards} icon="✨" color="text-cyan-400" />
-              <ResourceItem label="Provisions" value={resources.food} icon="🍎" color="text-red-500" />
+              <ResourceItem label="Food" value={resources.food} icon="🍎" color="text-red-500" />
             </div>
           </div>
 
@@ -55,7 +55,7 @@ const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <div className="text-white font-bold text-lg">{score.toLocaleString()}</div>
             </div>
           </div>
-          <button 
+          <button
             className="px-8 py-3 bg-orange-500 hover:bg-orange-400 rounded-xl text-white font-black text-xs uppercase shadow-lg shadow-orange-500/20 active:scale-95 transition-all"
             onClick={onClose}
           >

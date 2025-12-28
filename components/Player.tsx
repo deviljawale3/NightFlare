@@ -7,15 +7,7 @@ import { GameState, IslandTheme } from '../types';
 
 const Player: React.FC = () => {
   const groupRef = useRef<THREE.Group>(null);
-  const meshGroupRef = useRef<THREE.Group>(null);
-  const hipsRef = useRef<THREE.Group>(null);
-  const torsoRef = useRef<THREE.Group>(null);
-  const neckRef = useRef<THREE.Group>(null);
-  const leftLegRef = useRef<THREE.Group>(null);
-  const rightLegRef = useRef<THREE.Group>(null);
-  const leftArmRef = useRef<THREE.Group>(null);
-  const rightArmRef = useRef<THREE.Group>(null);
-  const weaponRef = useRef<THREE.Group>(null);
+  const velocity = useRef(new THREE.Vector3());
 
   const gameState = useGameStore(s => s.gameState);
   const playerStats = useGameStore(s => s.playerStats);
@@ -23,20 +15,15 @@ const Player: React.FC = () => {
   const triggerScreenShake = useGameStore(s => s.triggerScreenShake);
   const setPlayerGrounded = useGameStore(s => s.setPlayerGrounded);
 
-  const [attacking, setAttacking] = useState(false);
-  const [flashing, setFlashing] = useState(false);
-  const [damagedFlashing, setDamagedFlashing] = useState(false);
+  const [isAttacking, setIsAttacking] = useState(false);
+  const [isDamaged, setIsDamaged] = useState(false);
   const [verticalVelocity, setVerticalVelocity] = useState(0);
   const [isGrounded, setIsGrounded] = useState(true);
   const [combo, setCombo] = useState(0);
   const { camera } = useThree();
 
-  const moveLerp = useRef(0);
   const attackTimer = useRef(0);
-  const lastHeading = useRef(0);
   const comboTimeout = useRef<any>(null);
-
-  // Keyboard input ref
   const keys = useRef<{ [key: string]: boolean }>({});
 
   useEffect(() => {
@@ -59,9 +46,8 @@ const Player: React.FC = () => {
     };
 
     const handleAttack = () => {
-      if (!attacking) {
-        setAttacking(true);
-        setFlashing(true);
+      if (!isAttacking) {
+        setIsAttacking(true);
         attackTimer.current = 0;
 
         const shakeIntensity = 0.6 + combo * 0.3;
@@ -76,8 +62,7 @@ const Player: React.FC = () => {
         }, 110);
 
         const cooldown = Math.max(160, 350 - combo * 60);
-        setTimeout(() => setAttacking(false), cooldown);
-        setTimeout(() => setFlashing(false), 140);
+        setTimeout(() => setIsAttacking(false), cooldown);
 
         setCombo(prev => Math.min(prev + 1, 3));
         clearTimeout(comboTimeout.current);
@@ -86,8 +71,8 @@ const Player: React.FC = () => {
     };
 
     const handleDamaged = () => {
-      setDamagedFlashing(true);
-      setTimeout(() => setDamagedFlashing(false), 120);
+      setIsDamaged(true);
+      setTimeout(() => setIsDamaged(false), 120);
       setCombo(0);
     };
 
@@ -103,60 +88,55 @@ const Player: React.FC = () => {
       window.removeEventListener('player-attack', handleAttack);
       window.removeEventListener('player-damaged', handleDamaged);
     };
-  }, [isGrounded, attacking, triggerScreenShake, setPlayerGrounded, playerStats, combo]);
+  }, [isGrounded, isAttacking, triggerScreenShake, setPlayerGrounded, playerStats, combo]);
+
+  const getEnhancedMaterial = (color: string, metalness = 0.3, roughness = 0.7) => (
+    <meshStandardMaterial
+      color={color}
+      metalness={metalness}
+      roughness={roughness}
+      emissive={color}
+      emissiveIntensity={0.2}
+    />
+  );
 
   useFrame((state, delta) => {
     if ((gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) || !groupRef.current) return;
-    const t = state.clock.getElapsedTime();
 
-    // Joystick Input
+    // Movement Logic
+    const moveSpeed = playerStats.speed * delta * 5;
+    const acceleration = 0.15;
+
     let mX = (window as any).joystickX || 0;
     let mZ = (window as any).joystickY || 0;
 
-    // Keyboard Input Fallback
     if (mX === 0 && mZ === 0) {
       if (keys.current['KeyW'] || keys.current['ArrowUp']) mZ -= 1;
       if (keys.current['KeyS'] || keys.current['ArrowDown']) mZ += 1;
       if (keys.current['KeyA'] || keys.current['ArrowLeft']) mX -= 1;
       if (keys.current['KeyD'] || keys.current['ArrowRight']) mX += 1;
-
-      // Normalize keyboard vector
-      if (mX !== 0 || mZ !== 0) {
-        const length = Math.sqrt(mX * mX + mZ * mZ);
-        mX /= length;
-        mZ /= length;
-      }
     }
 
-    const inputMag = Math.sqrt(mX * mX + mZ * mZ);
-    const isMoving = inputMag > 0.1;
+    if (mX !== 0 || mZ !== 0) {
+      const length = Math.sqrt(mX * mX + mZ * mZ);
+      mX /= length;
+      mZ /= length;
 
-    // Smooth movement transition
-    moveLerp.current = THREE.MathUtils.lerp(moveLerp.current, isMoving ? 1 : 0, delta * 12);
+      velocity.current.x = THREE.MathUtils.lerp(velocity.current.x, mX * moveSpeed, acceleration);
+      velocity.current.z = THREE.MathUtils.lerp(velocity.current.z, mZ * moveSpeed, acceleration);
 
-    if (isMoving) {
       const targetHeading = Math.atan2(mX, mZ);
-      lastHeading.current = THREE.MathUtils.lerp(lastHeading.current, targetHeading, 0.25); // Snappier turn (was 0.18)
-
-      // Dynamic Tilt into Turn
-      const turnDiff = lastHeading.current - targetHeading;
-      const tilt = Math.max(-0.25, Math.min(0.25, turnDiff * 1.5));
-      groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, tilt, 0.1);
-      groupRef.current.rotation.y = lastHeading.current;
-
-      let speedMult = 1.0;
-      if (islandTheme === IslandTheme.ARCTIC) speedMult = 0.82;
-
-      const speed = playerStats.speed * delta * (0.85 + 0.15 * inputMag) * speedMult;
-      groupRef.current.position.x += Math.sin(lastHeading.current) * speed;
-      groupRef.current.position.z += Math.cos(lastHeading.current) * speed;
-    } else {
-      // Return to upright when stopped
-      groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, 0, 0.1);
+      groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetHeading, 0.15);
     }
 
-    (window as any).playerPos = groupRef.current.position.clone();
+    // Apply friction/damping
+    velocity.current.x *= 0.85;
+    velocity.current.z *= 0.85;
 
+    groupRef.current.position.x += velocity.current.x;
+    groupRef.current.position.z += velocity.current.z;
+
+    // Jump Physics
     if (!isGrounded) {
       groupRef.current.position.y += verticalVelocity;
       setVerticalVelocity(v => v - 0.032);
@@ -168,178 +148,167 @@ const Player: React.FC = () => {
       }
     }
 
-    // Polished Camera: Closer/Bouncier - Snappier follow
-    const targetCamPos = new THREE.Vector3(groupRef.current.position.x + 10, groupRef.current.position.y + 14, groupRef.current.position.z + 10);
-    camera.position.lerp(targetCamPos, 0.12); // Snappier camera (was 0.08)
-    camera.lookAt(groupRef.current.position.x, groupRef.current.position.y + 0.5, groupRef.current.position.z);
-
-    const freq = isMoving ? (inputMag > 0.8 ? 18 : 12) : 2.0;
-    const cycle = Math.sin(t * freq);
-    const cosCycle = Math.cos(t * freq);
-
-    if (meshGroupRef.current && hipsRef.current && torsoRef.current) {
-      // Run Bob
-      hipsRef.current.position.y = 0.9 + moveLerp.current * (Math.abs(cycle) * 0.15);
-      // Run Sway
-      hipsRef.current.rotation.z = Math.sin(t * freq * 0.5) * 0.1 * moveLerp.current;
-
-      if (rightArmRef.current && leftArmRef.current && leftLegRef.current && rightLegRef.current) {
-        if (attacking) {
-          attackTimer.current += delta;
-          const duration = 0.32;
-          const prog = Math.min(1, attackTimer.current / duration);
-
-          // 2-Stage Attack: Windup -> Strike
-          if (prog < 0.3) {
-            // Windup (Back)
-            const windup = prog / 0.3;
-            rightArmRef.current.rotation.x = THREE.MathUtils.lerp(-0.5, -2.5, windup);
-            rightArmRef.current.rotation.z = 0.8;
-            torsoRef.current.rotation.y = 0.5 * windup;
-          } else {
-            // Strike (Forward Snap)
-            const strike = (prog - 0.3) / 0.7;
-            // Elastic ease out
-            const snap = Math.sin(strike * Math.PI * 0.8);
-            rightArmRef.current.rotation.x = -2.5 + snap * 4.0;
-            rightArmRef.current.rotation.z = 0.2;
-            torsoRef.current.rotation.y = 0.5 - strike * 1.0; // Twist body into hit
-          }
-        } else {
-          // Idle/Run Animations
-          // Arms Counter-Swing
-          rightArmRef.current.rotation.x = moveLerp.current * (cosCycle * 0.8);
-          rightArmRef.current.rotation.z = 0.1 + moveLerp.current * 0.1;
-
-          leftArmRef.current.rotation.x = moveLerp.current * (-cosCycle * 0.8);
-          leftArmRef.current.rotation.z = -0.1 - moveLerp.current * 0.1;
-
-          // Legs
-          rightLegRef.current.rotation.x = moveLerp.current * (-cosCycle * 0.8);
-          leftLegRef.current.rotation.x = moveLerp.current * (cosCycle * 0.8);
-
-          // Reset Spine
-          torsoRef.current.rotation.y = 0;
-        }
-      }
-    }
+    // Export position for camera follow
+    (window as any).playerPos = groupRef.current.position.clone();
   });
 
-  const getMat = (c: string, emissive = "black") => (
-    <meshStandardMaterial
-      color={damagedFlashing || flashing ? "white" : c}
-      emissive={damagedFlashing || flashing ? "white" : emissive}
-      emissiveIntensity={damagedFlashing || flashing ? 15 : 0}
-      flatShading
-    />
-  );
-
   return (
-    <group ref={groupRef}>
-      <group ref={meshGroupRef}>
-        <group ref={hipsRef} position={[0, 0.9, 0]}>
+    <group ref={groupRef} position={[0, 0, 0]}>
+      {/* Dynamic Point Light */}
+      <pointLight
+        position={[0, 2, 0]}
+        intensity={playerStats.novaCharge / 50}
+        distance={8}
+        color="#ffae00"
+      />
 
-          {/* Human Body - Improved Proportions */}
-          <group ref={torsoRef} position={[0, 0.1, 0]}>
-            {/* Torso/Vest - Cream Color */}
-            <mesh castShadow position={[0, 0.1, 0]}>
-              <cylinderGeometry args={[0.34, 0.28, 0.9, 8]} />
-              {getMat("#F5F5DC")} {/* CREME COLOR VEST */}
-            </mesh>
+      {/* BODY - More detailed torso */}
+      <mesh position={[0, 1.2, 0]} castShadow>
+        <boxGeometry args={[0.7, 1, 0.5]} />
+        {getEnhancedMaterial('#2c3e50', 0.5, 0.6)}
+      </mesh>
 
-            {/* Neck Scarf/Bandana */}
-            <mesh position={[0, 0.62, 0.1]} rotation={[0.2, 0, 0]}>
-              <coneGeometry args={[0.28, 0.25, 2.5]} />
-              {getMat("#d32f2f")}
-            </mesh>
+      {/* CHEST ARMOR PLATE */}
+      {playerStats.hasArmor && (
+        <>
+          <mesh position={[0, 1.4, 0.26]} castShadow>
+            <boxGeometry args={[0.65, 0.8, 0.05]} />
+            {getEnhancedMaterial('#34495e', 0.8, 0.3)}
+          </mesh>
+          <mesh position={[-0.45, 1.7, 0]} castShadow>
+            <boxGeometry args={[0.25, 0.25, 0.5]} />
+            {getEnhancedMaterial('#34495e', 0.8, 0.3)}
+          </mesh>
+          <mesh position={[0.45, 1.7, 0]} castShadow>
+            <boxGeometry args={[0.25, 0.25, 0.5]} />
+            {getEnhancedMaterial('#34495e', 0.8, 0.3)}
+          </mesh>
+        </>
+      )}
 
-            {/* Head & Face */}
-            <group ref={neckRef} position={[0, 0.85, 0]}>
-              <mesh castShadow>
-                <sphereGeometry args={[0.3, 16, 16]} />
-                {getMat("#e0ac69")} {/* Skin Tone */}
-              </mesh>
-
-              {/* Face Details (Eyes) */}
-              <mesh position={[0.1, 0.05, 0.22]}>
-                <sphereGeometry args={[0.03]} />
-                <meshBasicMaterial color="#000" />
-              </mesh>
-              <mesh position={[-0.1, 0.05, 0.22]}>
-                <sphereGeometry args={[0.03]} />
-                <meshBasicMaterial color="#000" />
-              </mesh>
-
-              <group position={[0, 0.2, 0]}>
-                {/* Hat */}
-                <mesh position={[0, 0.05, 0]} rotation={[-0.05, 0, 0]}>
-                  <cylinderGeometry args={[0.95, 0.95, 0.05, 16]} />
-                  {getMat("#3e2723")}
-                </mesh>
-                <mesh position={[0, 0.25, 0]}>
-                  <cylinderGeometry args={[0.38, 0.42, 0.4, 12]} />
-                  {getMat("#3e2723")}
-                </mesh>
-              </group>
-            </group>
-
-            {/* Arms - Segmented */}
-            <group ref={leftArmRef} position={[-0.45, 0.45, 0]}>
-              <mesh position={[0, -0.3, 0]} castShadow>
-                <cylinderGeometry args={[0.09, 0.07, 0.7]} />
-                {getMat("#d7ccc8")} {/* Sleeve/Skin mix */}
-              </mesh>
-              <mesh position={[0, -0.7, 0]} castShadow>
-                <sphereGeometry args={[0.08]} />
-                {getMat("#e0ac69")} {/* Hand */}
-              </mesh>
-            </group>
-
-            <group ref={rightArmRef} position={[0.45, 0.45, 0]}>
-              <mesh position={[0, -0.3, 0]} castShadow>
-                <cylinderGeometry args={[0.09, 0.07, 0.7]} />
-                {getMat("#d7ccc8")}
-              </mesh>
-              <mesh position={[0, -0.7, 0]} castShadow>
-                <sphereGeometry args={[0.08]} />
-                {getMat("#e0ac69")} {/* Hand */}
-              </mesh>
-
-              {/* Weapon: Enchanted Staff - Refined */}
-              <group ref={weaponRef} position={[0, -0.6, 0.3]} rotation={[Math.PI / 2, 0, 0]}>
-                <mesh castShadow><cylinderGeometry args={[0.03, 0.03, 3.8, 8]} /><meshStandardMaterial color="#3e2723" /></mesh>
-                <mesh position={[0, 1.9, 0]}>
-                  <dodecahedronGeometry args={[0.35, 0]} />
-                  <meshStandardMaterial color="#ffcc00" emissive="#ffaa00" emissiveIntensity={60 + combo * 40} />
-                </mesh>
-                {(attacking || damagedFlashing) && <pointLight color="#ffcc00" intensity={120} distance={22} />}
-              </group>
-            </group>
-          </group>
-
-          {/* Legs - Segmented */}
-          <group ref={leftLegRef} position={[-0.2, 0, 0]}>
-            <mesh position={[0, -0.4, 0]} castShadow>
-              <cylinderGeometry args={[0.13, 0.1, 0.9]} />
-              {getMat("#263238")} {/* Jeans */}
-            </mesh>
-            <mesh position={[0, -0.9, 0.1]} castShadow>
-              <boxGeometry args={[0.2, 0.15, 0.35]} />
-              {getMat("#1a1a1a")} {/* Boots */}
-            </mesh>
-          </group>
-          <group ref={rightLegRef} position={[0.2, 0, 0]}>
-            <mesh position={[0, -0.4, 0]} castShadow>
-              <cylinderGeometry args={[0.13, 0.1, 0.9]} />
-              {getMat("#263238")}
-            </mesh>
-            <mesh position={[0, -0.9, 0.1]} castShadow>
-              <boxGeometry args={[0.2, 0.15, 0.35]} />
-              {getMat("#1a1a1a")}
-            </mesh>
-          </group>
-        </group>
+      {/* HEAD - More detailed */}
+      <group position={[0, 2.1, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.5, 0.5, 0.5]} />
+          {getEnhancedMaterial('#e8b89a', 0.1, 0.9)}
+        </mesh>
+        <mesh position={[-0.12, 0.08, 0.26]}>
+          <boxGeometry args={[0.08, 0.08, 0.02]} />
+          <meshStandardMaterial color="#00d4ff" emissive="#00d4ff" emissiveIntensity={2} />
+        </mesh>
+        <mesh position={[0.12, 0.08, 0.26]}>
+          <boxGeometry args={[0.08, 0.08, 0.02]} />
+          <meshStandardMaterial color="#00d4ff" emissive="#00d4ff" emissiveIntensity={2} />
+        </mesh>
+        <mesh position={[0, 0.3, 0]} castShadow>
+          <boxGeometry args={[0.52, 0.15, 0.52]} />
+          {getEnhancedMaterial('#8b4513', 0.2, 0.8)}
+        </mesh>
       </group>
+
+      {/* ARMS - Animated */}
+      <group position={[-0.5, 1.3, 0]} rotation={[0, 0, isAttacking ? -0.5 : 0.2]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.2, 0.8, 0.2]} />
+          {getEnhancedMaterial('#e8b89a', 0.1, 0.9)}
+        </mesh>
+        <mesh position={[0, -0.5, 0]} castShadow>
+          <boxGeometry args={[0.18, 0.6, 0.18]} />
+          {getEnhancedMaterial('#d4a574', 0.1, 0.9)}
+        </mesh>
+      </group>
+
+      <group position={[0.5, 1.3, 0]} rotation={[0, 0, isAttacking ? 0.5 : -0.2]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.2, 0.8, 0.2]} />
+          {getEnhancedMaterial('#e8b89a', 0.1, 0.9)}
+        </mesh>
+        <mesh position={[0, -0.5, 0]} castShadow>
+          <boxGeometry args={[0.18, 0.6, 0.18]} />
+          {getEnhancedMaterial('#d4a574', 0.1, 0.9)}
+        </mesh>
+      </group>
+
+      {/* LEGS - Animated walking */}
+      <group position={[-0.2, 0.5, 0]} rotation={[Math.sin(Date.now() * 0.01) * 0.3, 0, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.25, 0.9, 0.25]} />
+          {getEnhancedMaterial('#34495e', 0.4, 0.7)}
+        </mesh>
+        <mesh position={[0, -0.5, 0]} castShadow>
+          <boxGeometry args={[0.23, 0.6, 0.23]} />
+          {getEnhancedMaterial('#2c3e50', 0.4, 0.7)}
+        </mesh>
+        <mesh position={[0, -0.85, 0.05]} castShadow>
+          <boxGeometry args={[0.25, 0.15, 0.35]} />
+          {getEnhancedMaterial('#1a1a1a', 0.6, 0.5)}
+        </mesh>
+      </group>
+
+      <group position={[0.2, 0.5, 0]} rotation={[-Math.sin(Date.now() * 0.01) * 0.3, 0, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.25, 0.9, 0.25]} />
+          {getEnhancedMaterial('#34495e', 0.4, 0.7)}
+        </mesh>
+        <mesh position={[0, -0.5, 0]} castShadow>
+          <boxGeometry args={[0.23, 0.6, 0.23]} />
+          {getEnhancedMaterial('#2c3e50', 0.4, 0.7)}
+        </mesh>
+        <mesh position={[0, -0.85, 0.05]} castShadow>
+          <boxGeometry args={[0.25, 0.15, 0.35]} />
+          {getEnhancedMaterial('#1a1a1a', 0.6, 0.5)}
+        </mesh>
+      </group>
+
+      {/* WEAPON - Enhanced based on type */}
+      {playerStats.currentWeapon === 'STAFF' && (
+        <group position={[0.6, 1.2, 0]} rotation={[0, 0, -0.3]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.05, 0.05, 2, 8]} />
+            {getEnhancedMaterial('#8b4513', 0.3, 0.7)}
+          </mesh>
+          <mesh position={[0, 1.1, 0]}>
+            <octahedronGeometry args={[0.15]} />
+            <meshStandardMaterial color="#00d4ff" emissive="#00d4ff" emissiveIntensity={playerStats.novaCharge / 50} metalness={0.9} roughness={0.1} />
+          </mesh>
+          <pointLight position={[0, 1.1, 0]} intensity={playerStats.novaCharge / 30} distance={5} color="#00d4ff" />
+        </group>
+      )}
+
+      {playerStats.currentWeapon === 'SWORD' && playerStats.weaponLevels.SWORD > 0 && (
+        <group position={[0.6, 1.2, 0]} rotation={[0, 0, isAttacking ? -1.5 : -0.5]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.1, 1.2, 0.05]} />
+            <meshStandardMaterial color="#c0c0c0" metalness={0.9} roughness={0.1} emissive="#ff4400" emissiveIntensity={0.3} />
+          </mesh>
+          <mesh position={[0, -0.7, 0]} castShadow>
+            <boxGeometry args={[0.3, 0.15, 0.15]} />
+            {getEnhancedMaterial('#8b4513', 0.5, 0.6)}
+          </mesh>
+          <mesh position={[0, -0.85, 0]}>
+            <sphereGeometry args={[0.1]} />
+            {getEnhancedMaterial('#ffd700', 0.9, 0.2)}
+          </mesh>
+        </group>
+      )}
+
+      {/* NOVA CHARGE INDICATOR */}
+      {playerStats.novaCharge >= 100 && (
+        <group position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh>
+            <ringGeometry args={[0.8, 1, 32]} />
+            <meshStandardMaterial color="#ffae00" emissive="#ffae00" emissiveIntensity={2} transparent opacity={0.8} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+      )}
+
+      {/* DAMAGE FLASH */}
+      {isDamaged && (
+        <mesh position={[0, 1.5, 0]}>
+          <sphereGeometry args={[1.2, 16, 16]} />
+          <meshStandardMaterial color="#ff0000" transparent opacity={0.3} emissive="#ff0000" emissiveIntensity={3} />
+        </mesh>
+      )}
     </group>
   );
 };

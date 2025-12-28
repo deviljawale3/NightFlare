@@ -1,13 +1,23 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../store';
 import { GameState } from '../types';
 import DeeJayLabsLogo from './DeeJayLabsLogo';
 import HowToPlay from './HowToPlay';
-import SettingsPage from './SettingsPage';
+import SettingsPanel from './SettingsPanel';
 import ChatPanel from './ChatPanel';
+import ArenaHub from './ArenaHub';
+import BattleHistory from './BattleHistory';
+import MultiplayerToggle from './MultiplayerToggle';
 
-const MainMenu: React.FC = () => {
+interface MainMenuProps {
+  showTournament?: () => void;
+  showFriends?: () => void;
+  showAnalytics?: () => void;
+  showSeason?: () => void;
+}
+
+const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAnalytics, showSeason }) => {
   const {
     resetGame, loadGame, lastWave, bestScore, userProfile,
     updateUserProfile, leaderboard, getNightName,
@@ -18,18 +28,19 @@ const MainMenu: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showArena, setShowArena] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const [editName, setEditName] = useState(userProfile.name);
   const [editEmail, setEditEmail] = useState(userProfile.email);
   const [editAvatar, setEditAvatar] = useState(userProfile.avatar);
   const hasSave = !!localStorage.getItem('nightflare_save_v7');
 
-  // Timer for regen
   const [timeLeft, setTimeLeft] = useState('');
 
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
-      checkLifeRegen(); // Sync store
+      checkLifeRegen();
       const now = Date.now();
       const elapsed = now - lastLifeRegen;
       const LIFE_REGEN_MS = 10 * 60 * 1000;
@@ -46,49 +57,43 @@ const MainMenu: React.FC = () => {
     return () => clearInterval(interval);
   }, [lives, lastLifeRegen, checkLifeRegen]);
 
-  const handleGift = (id: string, name: string) => {
-    if (id === userProfile.name) return; // Can't gift self logic locally (using name for now if id matches)
-    giftLife(id);
-    alert(`Regenerated 1 Life for ${name}! The Nightflare approves.`);
-  };
-
   const avatarOptions = ['🤠', '🦁', '🦊', '🦉', '💀', '🤖', '👽', '👑'];
 
   return (
     <div className="fixed inset-0 w-full h-full flex flex-col items-center bg-gradient-to-b from-black/10 via-black/30 to-black/90 backdrop-blur-[1px] pointer-events-auto overflow-y-auto px-6 custom-scrollbar z-[100] safe-padding">
 
-      {/* Life Counter (Top Left) */}
-      <div className="fixed top-6 left-6 z-[120]">
-        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-xl group hover:scale-105 transition-all">
-          <div className="flex -space-x-1">
+      {/* Life Counter (Top Left) - MOBILE OPTIMIZED */}
+      <div className="fixed top-3 sm:top-6 left-3 sm:left-6 z-[120]">
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-black/60 backdrop-blur-md px-2 sm:px-4 py-1.5 sm:py-2 rounded-full border border-white/10 shadow-xl group hover:scale-105 transition-all">
+          <div className="flex -space-x-0.5 sm:-space-x-1">
             {[...Array(3)].map((_, i) => (
-              <span key={i} className={`text-2xl transition-all duration-500 ${i < lives ? 'text-red-600 drop-shadow-[0_0_10px_rgba(220,38,38,0.8)] scale-100' : 'text-white/10 scale-90 grayscale'}`}>
+              <span key={i} className={`text-lg sm:text-2xl transition-all duration-500 ${i < lives ? 'text-red-600 drop-shadow-[0_0_10px_rgba(220,38,38,0.8)] scale-100' : 'text-white/10 scale-90 grayscale'}`}>
                 ♥
               </span>
             ))}
           </div>
           {lives < 3 && (
-            <span className="text-[10px] font-black text-white/50 tracking-widest tabular-nums animate-pulse w-12 text-center">
+            <span className="text-[9px] sm:text-[10px] font-black text-white/50 tracking-widest tabular-nums animate-pulse w-10 sm:w-12 text-center">
               {timeLeft}
             </span>
           )}
         </div>
       </div>
 
-      {/* Profile Header */}
-      <div className="fixed top-6 right-6 z-[120]">
-        <button onClick={() => setShowProfile(true)} className="flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-xl hover:scale-105 transition-all group">
-          <span className="text-white text-xs font-black uppercase tracking-wider text-right">
+      {/* Profile Header - MOBILE OPTIMIZED */}
+      <div className="fixed top-3 sm:top-6 right-3 sm:right-6 z-[120]">
+        <button onClick={() => setShowProfile(true)} className="flex items-center gap-2 sm:gap-3 bg-black/60 backdrop-blur-md px-2 sm:px-4 py-1.5 sm:py-2 rounded-full border border-white/10 shadow-xl hover:scale-105 transition-all group">
+          <span className="text-white text-[10px] sm:text-xs font-black uppercase tracking-wider text-right hidden sm:block">
             {userProfile.name}<br />
             <span className="text-[#3a86ff] text-[9px]">{bestScore.toLocaleString()} PTS</span>
           </span>
-          <div className="w-10 h-10 rounded-full bg-orange-600 border-2 border-white flex items-center justify-center text-2xl shadow-lg group-hover:rotate-12 transition-transform">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-orange-600 border-2 border-white flex items-center justify-center text-xl sm:text-2xl shadow-lg group-hover:rotate-12 transition-transform">
             {userProfile.avatar}
           </div>
         </button>
       </div>
 
-      <div className="w-full max-w-md flex flex-col items-center justify-start pt-4 sm:pt-12 pb-8 min-h-full animate-in fade-in zoom-in duration-700">
+      <div className="w-full max-w-md flex flex-col items-center justify-start pt-24 sm:pt-12 pb-8 min-h-full animate-in fade-in zoom-in duration-700">
 
         {/* Main Logo Section */}
         <div className="mb-6 sm:mb-10 text-center w-full px-4">
@@ -127,28 +132,108 @@ const MainMenu: React.FC = () => {
             </button>
           )}
 
-          {/* POLISHED SMALL SECONDARY BUTTONS */}
-          <div className="flex flex-col gap-3 w-full max-w-[280px] mt-2 sm:mt-6">
-            <button
-              onClick={() => setShowLeaderboard(true)}
-              className="group w-full h-10 sm:h-12 bg-[#1a1a1a] text-white/70 rounded-xl font-black border border-white/10 hover:bg-[#2a2a2a] hover:text-white transition-all text-[11px] sm:text-[12px] uppercase italic tracking-widest flex items-center justify-center gap-2"
-            >
-              <span>🏆 LEADERBOARD</span>
-            </button>
-            <div className="flex gap-2">
+          {/* COMPACT ICON-BASED MENU */}
+          <div className="flex flex-col gap-4 w-full max-w-[280px] mt-2 sm:mt-6">
+
+            {/* Main Action Icons - Grid Layout */}
+            <div className="grid grid-cols-5 gap-2">
+              {/* Leaderboard */}
               <button
-                onClick={() => setShowSettings(true)}
-                className="group w-full h-10 sm:h-12 bg-gradient-to-b from-[#2a2a2a] to-[#0a0a0a] text-white/70 rounded-xl font-black border-t border-white/10 hover:text-white transition-all text-[11px] sm:text-[12px] uppercase italic tracking-widest shadow-[0_4px_0_rgb(0,0,0),0_8px_16px_rgba(0,0,0,0.5)] active:translate-y-0.5 active:shadow-[0_2px_0_rgb(0,0,0)] flex items-center justify-center"
+                onClick={() => setShowLeaderboard(true)}
+                className="group aspect-square bg-black/40 backdrop-blur-md rounded-xl border border-white/10 hover:border-white/30 hover:bg-white/5 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 shadow-lg"
+                title="Leaderboard"
               >
-                <span className="group-hover:scale-110 transition-transform">SETTINGS</span>
+                <span className="text-2xl group-hover:scale-110 transition-transform">🏆</span>
+                <span className="text-[7px] text-white/50 font-bold uppercase tracking-wider">Board</span>
               </button>
 
+              {/* Shadow Arena */}
+              <button
+                onClick={() => setShowArena(true)}
+                className="group aspect-square bg-gradient-to-br from-red-900/30 to-orange-900/30 backdrop-blur-md rounded-xl border border-orange-500/20 hover:border-orange-500/50 hover:shadow-[0_0_20px_rgba(234,88,12,0.3)] transition-all flex flex-col items-center justify-center gap-1 active:scale-95"
+                title="Shadow Arena"
+              >
+                <span className="text-2xl group-hover:scale-110 transition-transform">⚔️</span>
+                <span className="text-[7px] text-orange-400/70 font-bold uppercase tracking-wider">Arena</span>
+              </button>
+
+              {/* Battle History */}
+              <button
+                onClick={() => setShowHistory(true)}
+                className="group aspect-square bg-gradient-to-br from-purple-900/30 to-blue-900/30 backdrop-blur-md rounded-xl border border-purple-500/20 hover:border-purple-500/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all flex flex-col items-center justify-center gap-1 active:scale-95"
+                title="Battle History"
+              >
+                <span className="text-2xl group-hover:scale-110 transition-transform">📜</span>
+                <span className="text-[7px] text-purple-400/70 font-bold uppercase tracking-wider">History</span>
+              </button>
+
+              {/* Settings */}
+              <button
+                onClick={() => setShowSettings(true)}
+                className="group aspect-square bg-black/40 backdrop-blur-md rounded-xl border border-white/10 hover:border-white/30 hover:bg-white/5 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 shadow-lg"
+                title="Settings"
+              >
+                <span className="text-2xl group-hover:scale-110 group-hover:rotate-90 transition-all">⚙️</span>
+                <span className="text-[7px] text-white/50 font-bold uppercase tracking-wider">Settings</span>
+              </button>
+
+              {/* Guide */}
               <button
                 onClick={() => setShowHowToPlay(true)}
-                className="group w-full h-10 sm:h-12 bg-gradient-to-b from-[#2a2a2a] to-[#0a0a0a] text-white/70 rounded-xl font-black border-t border-white/10 hover:text-white transition-all text-[11px] sm:text-[12px] uppercase italic tracking-widest shadow-[0_4px_0_rgb(0,0,0),0_8px_16px_rgba(0,0,0,0.5)] active:translate-y-0.5 active:shadow-[0_2px_0_rgb(0,0,0)] flex items-center justify-center"
+                className="group aspect-square bg-black/40 backdrop-blur-md rounded-xl border border-white/10 hover:border-white/30 hover:bg-white/5 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 shadow-lg"
+                title="How to Play"
               >
-                <span className="group-hover:scale-110 transition-transform">GUIDE</span>
+                <span className="text-2xl group-hover:scale-110 transition-transform">📖</span>
+                <span className="text-[7px] text-white/50 font-bold uppercase tracking-wider">Guide</span>
               </button>
+            </div>
+
+            {/* Secondary Icons - 4 Column Grid */}
+            <div className="grid grid-cols-4 gap-2">
+              {/* Tournaments */}
+              <button
+                onClick={showTournament}
+                className="group aspect-square bg-gradient-to-br from-yellow-900/30 to-yellow-600/30 backdrop-blur-md rounded-xl border border-yellow-500/20 hover:border-yellow-500/50 hover:shadow-[0_0_20px_rgba(234,179,8,0.3)] transition-all flex flex-col items-center justify-center gap-0.5 active:scale-95"
+                title="Tournaments"
+              >
+                <span className="text-xl group-hover:scale-110 transition-transform">🏆</span>
+                <span className="text-[6px] text-yellow-400/70 font-bold uppercase tracking-wider">Tourney</span>
+              </button>
+
+              {/* Friends */}
+              <button
+                onClick={showFriends}
+                className="group aspect-square bg-gradient-to-br from-blue-900/30 to-cyan-600/30 backdrop-blur-md rounded-xl border border-blue-500/20 hover:border-blue-500/50 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all flex flex-col items-center justify-center gap-0.5 active:scale-95"
+                title="Friends"
+              >
+                <span className="text-xl group-hover:scale-110 transition-transform">👥</span>
+                <span className="text-[6px] text-blue-400/70 font-bold uppercase tracking-wider">Friends</span>
+              </button>
+
+              {/* Analytics */}
+              <button
+                onClick={showAnalytics}
+                className="group aspect-square bg-gradient-to-br from-purple-900/30 to-pink-600/30 backdrop-blur-md rounded-xl border border-purple-500/20 hover:border-purple-500/50 hover:shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all flex flex-col items-center justify-center gap-0.5 active:scale-95"
+                title="Analytics"
+              >
+                <span className="text-xl group-hover:scale-110 transition-transform">📈</span>
+                <span className="text-[6px] text-purple-400/70 font-bold uppercase tracking-wider">Stats</span>
+              </button>
+
+              {/* Season */}
+              <button
+                onClick={showSeason}
+                className="group aspect-square bg-gradient-to-br from-indigo-900/30 to-indigo-600/30 backdrop-blur-md rounded-xl border border-indigo-500/20 hover:border-indigo-500/50 hover:shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all flex flex-col items-center justify-center gap-0.5 active:scale-95"
+                title="Season"
+              >
+                <span className="text-xl group-hover:scale-110 transition-transform">🎪</span>
+                <span className="text-[6px] text-indigo-400/70 font-bold uppercase tracking-wider">Season</span>
+              </button>
+            </div>
+
+            {/* Compact Multiplayer Toggle */}
+            <div className="mt-2">
+              <MultiplayerToggle />
             </div>
           </div>
         </div>
@@ -172,7 +257,7 @@ const MainMenu: React.FC = () => {
       </div>
 
       {showHowToPlay && <HowToPlay onBack={() => setShowHowToPlay(false)} />}
-      {showSettings && <SettingsPage onBack={() => setShowSettings(false)} />}
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
       {/* PROFILE SETTINGS MODAL */}
       {showProfile && (
@@ -206,7 +291,6 @@ const MainMenu: React.FC = () => {
                             canvas.width = size;
                             canvas.height = size;
                             if (ctx) {
-                              // Cover fit
                               const scale = Math.max(size / img.width, size / img.height);
                               const x = (size / 2) - (img.width / 2) * scale;
                               const y = (size / 2) - (img.height / 2) * scale;
@@ -314,6 +398,9 @@ const MainMenu: React.FC = () => {
           </div>
         </div>
       )}
+
+      {showArena && <ArenaHub onBack={() => setShowArena(false)} />}
+      {showHistory && <BattleHistory onBack={() => setShowHistory(false)} />}
     </div>
   );
 };
