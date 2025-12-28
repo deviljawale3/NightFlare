@@ -1,22 +1,16 @@
-
 import { create } from 'zustand';
-import { GameState, TimeOfDay, Resources, PlayerStats, ResourceNode, Structure, EnemyClass, IslandTheme, NightEvent } from './types';
-
-interface GameSettings {
-  soundEnabled: boolean;
-  vibrationEnabled: boolean;
-}
+import { GameState, TimeOfDay, IslandTheme, NightEvent, GameSettings, EnemyClass } from './types';
 
 interface GameStore {
   gameState: GameState;
   timeOfDay: TimeOfDay;
   level: number;
-  levelTimer: number; // Seconds remaining in current level
+  levelTimer: number;
   wave: number;
   lastWave: number;
   bestNight: number;
-  resources: Resources;
-  playerStats: PlayerStats;
+  resources: import('./types').Resources;
+  playerStats: import('./types').PlayerStats;
   nightflareHealth: number;
   maxNightflareHealth: number;
   score: number;
@@ -24,8 +18,8 @@ interface GameStore {
   kills: number;
   tutorialStep: number;
   screenShake: number;
-  nodes: ResourceNode[];
-  structures: Structure[];
+  nodes: import('./types').ResourceNode[];
+  structures: import('./types').Structure[];
   isPlayerGrounded: boolean;
   settings: GameSettings;
   islandTheme: IslandTheme;
@@ -33,25 +27,25 @@ interface GameStore {
 
   setGameState: (state: GameState) => void;
   setTimeOfDay: (time: TimeOfDay) => void;
-  setNodes: (nodes: ResourceNode[]) => void;
+  setNodes: (nodes: import('./types').ResourceNode[]) => void;
   addStructure: (type: 'WALL' | 'PYLON', pos: [number, number, number]) => void;
   damageStructure: (id: string, amount: number) => void;
   removeNode: (id: string) => void;
-  addResource: (type: keyof Resources, amount: number, pos?: [number, number, number]) => void;
-  consumeResource: (type: keyof Resources, amount: number) => boolean;
+  addResource: (type: keyof import('./types').Resources, amount: number, pos?: [number, number, number]) => void;
+  consumeResource: (type: keyof import('./types').Resources, amount: number) => boolean;
   damagePlayer: (amount: number) => void;
   healPlayer: (amount: number) => void;
   damageNightflare: (amount: number) => void;
   healNightflare: (amount: number) => void;
   triggerNova: () => void;
   nextWave: () => void;
-  nextLevel: () => void;
   decrementTimer: () => void;
+  nextLevel: () => void;
+  recordEnemyKill: (type: import('./types').EnemyClass) => void;
   resetGame: (isNew?: boolean) => void;
-  upgradePlayer: (upgrade: Partial<PlayerStats>) => void;
+  upgradePlayer: (upgrade: Partial<import('./types').PlayerStats>) => void;
   buyPermanentUpgrade: (stat: 'strength' | 'agility' | 'vitality') => boolean;
   addScore: (points: number) => void;
-  recordEnemyKill: (type: EnemyClass) => void;
   triggerScreenShake: (intensity: number) => void;
   completeTutorialStep: () => void;
   saveGame: () => void;
@@ -59,6 +53,20 @@ interface GameStore {
   getNightName: (index: number) => string;
   setPlayerGrounded: (grounded: boolean) => void;
   updateSettings: (settings: Partial<GameSettings>) => void;
+  userProfile: import('./types').UserProfile;
+  updateUserProfile: (profile: Partial<import('./types').UserProfile>) => void;
+  leaderboard: import('./types').LeaderboardEntry[];
+  addToLeaderboard: (entry: import('./types').LeaderboardEntry) => void;
+  chatMessages: import('./types').ChatMessage[];
+  addChatMessage: (msg: Partial<import('./types').ChatMessage>) => void;
+  grantRequest: (msgId: string) => void;
+  giftLife: (targetId: string, fromChat?: boolean) => boolean;
+  upgradeWeapon: (weapon: import('./types').WeaponType) => void;
+  equipWeapon: (weapon: import('./types').WeaponType) => void;
+  lives: number;
+  lastLifeRegen: number;
+  useLife: () => boolean;
+  checkLifeRegen: () => void;
 }
 
 const STORAGE_KEY = 'nightflare_save_v7';
@@ -89,7 +97,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     hasSpear: false,
     novaCharge: 0,
     upgradeLevels: { strength: 0, agility: 0, vitality: 0 },
-    unlockedAbilities: { shield: false, chargedAttack: false }
+    unlockedAbilities: { shield: false, chargedAttack: false },
+    weaponLevels: { STAFF: 1, SWORD: 0, BOW: 0 },
+    currentWeapon: 'STAFF'
   },
   nightflareHealth: 100,
   maxNightflareHealth: 100,
@@ -104,12 +114,157 @@ export const useGameStore = create<GameStore>((set, get) => ({
   settings: loadSettings(),
   islandTheme: IslandTheme.FOREST,
   currentNightEvent: NightEvent.NONE,
+  chatMessages: [],
+
+  lives: Number(localStorage.getItem('nightflare_lives')) || 3,
+  lastLifeRegen: Number(localStorage.getItem('nightflare_life_regen')) || Date.now(),
+
+  checkLifeRegen: () => {
+    const { lives, lastLifeRegen } = get();
+    if (lives >= 3) return;
+
+    // 10 minutes = 600000 ms
+    const LIFE_REGEN_MS = 600000;
+    const now = Date.now();
+    const elapsed = now - lastLifeRegen;
+
+    if (elapsed >= LIFE_REGEN_MS) {
+      const livesToGain = Math.floor(elapsed / LIFE_REGEN_MS);
+      const newLives = Math.min(3, lives + livesToGain);
+
+      const remainder = elapsed % LIFE_REGEN_MS;
+      const newRegenTime = newLives === 3 ? now : now - remainder;
+
+      set({ lives: newLives, lastLifeRegen: newRegenTime });
+      localStorage.setItem('nightflare_lives', newLives.toString());
+      localStorage.setItem('nightflare_life_regen', newRegenTime.toString());
+    }
+  },
+
+  useLife: () => {
+    const { lives } = get();
+    get().checkLifeRegen(); // Sync first
+    if (lives > 0) {
+      const newLives = lives - 1;
+      set({ lives: newLives });
+      localStorage.setItem('nightflare_lives', newLives.toString());
+      if (lives === 3) {
+        const now = Date.now();
+        set({ lastLifeRegen: now });
+        localStorage.setItem('nightflare_life_regen', now.toString());
+      }
+      return true;
+    }
+    return false;
+  },
+
+  giftLife: (targetId, fromChat = false) => {
+    const { userProfile, addChatMessage } = get();
+    console.log(`Sending life to ${targetId}`);
+
+    if (fromChat) {
+      addChatMessage({
+        senderId: 'system',
+        senderName: 'System',
+        content: `${userProfile.name} gifted a Life directly to ${targetId}!`,
+        type: 'SYSTEM',
+        timestamp: Date.now()
+      });
+    }
+    return true; // Sent successfully
+  },
+
+  addChatMessage: (msg) => set((state) => {
+    const { userProfile } = state;
+    const newMsg: import('./types').ChatMessage = {
+      id: Math.random().toString(36).substr(2, 9),
+      senderId: userProfile.name === msg.senderName ? 'player' : 'other', // logic simplification
+      senderName: msg.senderName || userProfile.name,
+      senderAvatar: msg.senderAvatar || userProfile.avatar,
+      content: msg.content || '',
+      timestamp: Date.now(),
+      type: msg.type || 'CHAT',
+      requestStatus: msg.type?.startsWith('REQUEST') ? 'PENDING' : undefined,
+      weaponType: msg.weaponType,
+      targetId: msg.senderId
+    };
+    return { chatMessages: [...state.chatMessages, newMsg].slice(-50) }; // Keep last 50
+  }),
+
+  grantRequest: (msgId) => set((state) => {
+    const { chatMessages, userProfile } = state;
+    const msgIndex = chatMessages.findIndex(m => m.id === msgId);
+    if (msgIndex === -1) return {};
+
+    const msg = chatMessages[msgIndex];
+    if (msg.requestStatus !== 'PENDING') return {};
+
+    // Logic to actually give item could go here (subtract resource from granter?)
+    // For now, just mark granted.
+
+    const newMsgs = [...chatMessages];
+    newMsgs[msgIndex] = { ...msg, requestStatus: 'GRANTED' };
+
+    // Add system notification
+    const systemMsg: import('./types').ChatMessage = {
+      id: Math.random().toString(36).substr(2, 9),
+      senderId: 'system',
+      senderName: 'Nightflare',
+      senderAvatar: '🔥',
+      content: `${userProfile.name} granted ${msg.senderName}'s request!`,
+      timestamp: Date.now(),
+      type: 'SYSTEM'
+    };
+
+    return { chatMessages: [...newMsgs, systemMsg].slice(-50) };
+  }),
+
+  upgradeWeapon: (weapon) => {
+    const { playerStats, bestScore, resources, consumeResource } = get();
+    const currentLvl = playerStats.weaponLevels[weapon];
+    const cost = (currentLvl + 1) * 25;
+
+    // Unlock Checks based on Score Points
+    if (weapon === 'SWORD' && bestScore < 5000) return;
+    if (weapon === 'BOW' && bestScore < 15000) return;
+
+    if (resources.lightShards >= cost) {
+      consumeResource('lightShards', cost);
+      set({
+        playerStats: {
+          ...playerStats,
+          weaponLevels: {
+            ...playerStats.weaponLevels,
+            [weapon]: currentLvl + 1
+          },
+          attackDamage: playerStats.attackDamage + (weapon === 'SWORD' ? 30 : 15)
+        }
+      });
+    }
+  },
+
+  equipWeapon: (weapon) => set(state => ({
+    playerStats: { ...state.playerStats, currentWeapon: weapon }
+  })),
 
   setGameState: (state) => {
     const { wave, bestNight, score, bestScore } = get();
     if (state === GameState.GAME_OVER) {
       localStorage.setItem('nightflare_last_wave', wave.toString());
       set({ lastWave: wave });
+
+      const { userProfile, addToLeaderboard, getNightName } = get();
+      if (score > 0) {
+        addToLeaderboard({
+          id: Date.now().toString(),
+          name: userProfile.name,
+          score: score,
+          wave: getNightName(wave),
+          date: new Date().toLocaleDateString(),
+          avatar: userProfile.avatar
+        });
+      }
+
       if (wave > bestNight) {
         set({ bestNight: wave });
         localStorage.setItem('nightflare_best_night', wave.toString());
@@ -268,6 +423,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   }),
 
   resetGame: (isNew = true) => {
+    if (isNew) {
+      const canPlay = get().useLife();
+      if (!canPlay) {
+        alert("No Energy Cores (Lives) remaining! Wait for recharge.");
+        return;
+      }
+    }
     set({
       gameState: isNew ? GameState.TUTORIAL : GameState.PLAYING,
       timeOfDay: TimeOfDay.DAY,
@@ -286,7 +448,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hasSpear: false,
         novaCharge: 0,
         upgradeLevels: { strength: 0, agility: 0, vitality: 0 },
-        unlockedAbilities: { shield: false, chargedAttack: false }
+        unlockedAbilities: { shield: false, chargedAttack: false },
+        weaponLevels: { STAFF: 1, SWORD: 0, BOW: 0 },
+        currentWeapon: 'STAFF'
       },
       nightflareHealth: 100,
       score: 0,
@@ -382,5 +546,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const updated = { ...state.settings, ...newSettings };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
     return { settings: updated };
+  }),
+
+  userProfile: (() => {
+    const stored = localStorage.getItem('nightflare_user_profile');
+    return stored ? JSON.parse(stored) : { name: 'Survivor', email: '', avatar: '🤠' };
+  })(),
+
+  leaderboard: (() => {
+    const stored = localStorage.getItem('nightflare_leaderboard');
+    return stored ? JSON.parse(stored) : [
+      { id: '1', name: 'Alpha', score: 25000, wave: 'Night 10', date: '2025-01-01', avatar: '🦁' },
+      { id: '2', name: 'Beta', score: 12000, wave: 'Night 5', date: '2025-01-02', avatar: '🦊' },
+      { id: '3', name: 'Gamma', score: 5000, wave: 'Night 3', date: '2025-01-03', avatar: '🦉' }
+    ];
+  })(),
+
+  updateUserProfile: (profile) => set((state) => {
+    const updated = { ...state.userProfile, ...profile };
+    localStorage.setItem('nightflare_user_profile', JSON.stringify(updated));
+    return { userProfile: updated };
+  }),
+
+  addToLeaderboard: (entry) => set((state) => {
+    const newBoard = [...state.leaderboard, entry].sort((a, b) => b.score - a.score).slice(0, 10);
+    localStorage.setItem('nightflare_leaderboard', JSON.stringify(newBoard));
+    return { leaderboard: newBoard };
   })
 }));

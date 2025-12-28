@@ -1,29 +1,23 @@
-
 import React, { useState, useRef } from 'react';
 import { useGameStore } from '../store';
 import { TimeOfDay, GameState } from '../types';
+import ChatPanel from './ChatPanel';
+import SocialShare from './SocialShare';
 
 interface HUDProps {
   onOpenInventory: () => void;
   onOpenCrafting: () => void;
 }
 
-const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
-  const { resources, playerStats, nightflareHealth, wave, timeOfDay, gameState, setGameState, triggerNova, getNightName, isPlayerGrounded, kills, score, level, levelTimer } = useGameStore();
+// Isolated Joystick Component to prevent parent re-renders
+const Joystick: React.FC = React.memo(() => {
+  const [active, setActive] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const baseRef = useRef<HTMLDivElement>(null);
 
-  const [joystickActive, setJoystickActive] = useState(false);
-  const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
-  const joystickBaseRef = useRef<HTMLDivElement>(null);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handleJoystick = (clientX: number, clientY: number) => {
-    if (!joystickBaseRef.current || (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL)) return;
-    const rect = joystickBaseRef.current.getBoundingClientRect();
+  const handleMove = (clientX: number, clientY: number) => {
+    if (!baseRef.current) return;
+    const rect = baseRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
     const dX = clientX - centerX;
@@ -33,20 +27,102 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
     const scale = Math.min(dist, maxDist) / dist;
     const limitedX = dX * scale;
     const limitedY = dY * scale;
-    setJoystickPos({ x: limitedX, y: limitedY });
+
+    setPos({ x: limitedX, y: limitedY });
+
+    // Direct global update (bypassing React state for game loop)
     (window as any).joystickX = limitedX / maxDist;
     (window as any).joystickY = limitedY / maxDist;
   };
 
-  const stopJoystick = () => {
-    setJoystickActive(false);
-    setJoystickPos({ x: 0, y: 0 });
+  const handleEnd = () => {
+    setActive(false);
+    setPos({ x: 0, y: 0 });
     (window as any).joystickX = 0;
     (window as any).joystickY = 0;
   };
 
   return (
-    <div className="w-full h-full flex flex-col justify-between p-3 sm:p-8 select-none pointer-events-none font-['Outfit'] overflow-hidden">
+    <div className="flex flex-col items-center">
+      <div
+        ref={baseRef}
+        className="w-28 h-28 sm:w-44 sm:h-44 rounded-full border border-white/10 bg-black/40 pointer-events-auto touch-none flex items-center justify-center shadow-inner"
+        onPointerDown={e => {
+          setActive(true);
+          (e.target as Element).setPointerCapture(e.pointerId);
+          handleMove(e.clientX, e.clientY);
+        }}
+        onPointerMove={e => { if (active) handleMove(e.clientX, e.clientY); }}
+        onPointerUp={e => { (e.target as Element).releasePointerCapture(e.pointerId); handleEnd(); }}
+        onPointerCancel={handleEnd}
+      >
+        <div
+          className="w-12 h-12 sm:w-20 sm:h-20 rounded-full bg-white/15 backdrop-blur-md border border-white/20 shadow-2xl pointer-events-none"
+          style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+        />
+      </div>
+    </div>
+  );
+});
+
+const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
+  const { resources, playerStats, nightflareHealth, level, levelTimer, chatMessages, setGameState, triggerNova, isPlayerGrounded, wave, score } = useGameStore(
+    // Selector for perf optimization: only re-render on specific changes
+    (state) => ({
+      resources: state.resources,
+      playerStats: state.playerStats,
+      nightflareHealth: state.nightflareHealth,
+      level: state.level,
+      levelTimer: state.levelTimer,
+      chatMessages: state.chatMessages,
+      setGameState: state.setGameState,
+      triggerNova: state.triggerNova,
+      isPlayerGrounded: state.isPlayerGrounded,
+      wave: state.wave,
+      score: state.score,
+    })
+  );
+
+  // Shallow comparison isn't default for hook, so we might re-render. 
+  // But moving joystick out is the biggest win.
+
+  const [showChat, setShowChat] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
+  const lastMsgCount = useRef(chatMessages.length);
+
+  React.useEffect(() => {
+    if (chatMessages.length > lastMsgCount.current && !showChat) {
+      setHasUnread(true);
+    }
+    lastMsgCount.current = chatMessages.length;
+  }, [chatMessages.length, showChat]);
+
+  React.useEffect(() => {
+    if (showChat) setHasUnread(false);
+  }, [showChat]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col justify-between p-3 sm:p-8 select-none pointer-events-none font-['Outfit'] overflow-hidden relative">
+
+      {/* CHAT OVERLAY */}
+      {showChat && (
+        <div className="absolute top-24 left-4 z-50 w-[80vw] sm:w-96 h-64 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 pointer-events-auto flex flex-col shadow-2xl animate-in slide-in-from-left-4 duration-200">
+          <div className="flex justify-between items-center p-2 border-b border-white/10 bg-white/5 rounded-t-2xl">
+            <span className="text-[10px] font-black uppercase tracking-widest text-white/50 pl-2">Radio Comms</span>
+            <button onClick={() => setShowChat(false)} className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white">✕</button>
+          </div>
+          <div className="flex-1 overflow-hidden relative">
+            <ChatPanel compact />
+          </div>
+        </div>
+      )}
 
       {/* TOP SECTION: HEALTH, TIMER, RESOURCES */}
       <div className="flex justify-between items-start w-full relative h-24">
@@ -101,28 +177,45 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
             </div>
           </div>
 
-          <button
-            onClick={() => setGameState(GameState.PAUSED)}
-            className="w-10 h-10 sm:w-16 sm:h-16 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-2xl pointer-events-auto"
-          >
-            <span className="text-lg sm:text-2xl">⏸️</span>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowShare(true)}
+              className="w-10 h-10 sm:w-16 sm:h-16 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-2xl pointer-events-auto"
+            >
+              <span className="text-lg sm:text-2xl">📸</span>
+            </button>
+            <button
+              onClick={() => setShowChat(!showChat)}
+              className={`w-10 h-10 sm:w-16 sm:h-16 bg-blue-900/40 border border-blue-400/30 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-2xl pointer-events-auto ${showChat ? 'bg-blue-600' : ''}`}
+            >
+              <span className="text-lg sm:text-2xl">💬</span>
+              {hasUnread && <div className="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_red]" />}
+            </button>
+            <button
+              onClick={() => {
+                // Force immediate state update
+                useGameStore.getState().setGameState(GameState.PAUSED);
+              }}
+              className="w-10 h-10 sm:w-16 sm:h-16 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-2xl pointer-events-auto"
+            >
+              <span className="text-lg sm:text-2xl">⏸️</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* BRANDING watermark */}
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 opacity-20 pointer-events-none z-0">
+        <div className="flex items-center gap-1">
+          <span className="text-[8px] font-black text-white uppercase tracking-widest italic">DeeJay Labs</span>
         </div>
       </div>
 
       {/* BOTTOM SECTION: CONTROLS */}
       <div className="flex justify-between items-end w-full pb-4 px-2">
 
-        {/* Joystick */}
-        <div className="flex flex-col items-center">
-          <div ref={joystickBaseRef} className="w-28 h-28 sm:w-44 sm:h-44 rounded-full border border-white/10 bg-black/40 pointer-events-auto touch-none flex items-center justify-center shadow-inner"
-            onPointerDown={e => { setJoystickActive(true); handleJoystick(e.clientX, e.clientY); }}
-            onPointerMove={e => joystickActive && handleJoystick(e.clientX, e.clientY)}
-            onPointerUp={stopJoystick} onPointerLeave={stopJoystick}>
-            <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-full bg-white/15 backdrop-blur-md border border-white/20 shadow-2xl transition-transform duration-75"
-              style={{ transform: `translate(${joystickPos.x}px, ${joystickPos.y}px)` }} />
-          </div>
-        </div>
+        {/* Joystick - Isolated */}
+        <Joystick />
 
         {/* Center Utilities */}
         <div className="flex flex-col items-center gap-6 pointer-events-auto">
@@ -155,6 +248,8 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
           </button>
         </div>
       </div>
+
+      {showShare && <SocialShare onClose={() => setShowShare(false)} stats={{ wave, score }} />}
     </div>
   );
 };

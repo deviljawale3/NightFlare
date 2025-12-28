@@ -26,7 +26,7 @@ const Nightflare: React.FC = () => {
     const hitDuration = 600;
     const timeSinceHit = performance.now() - flickerTime;
     const hitReaction = timeSinceHit < hitDuration;
-    
+
     const healthFactor = (100 - nightflareHealth) / 100;
     const pulseSpeed = 4 + healthFactor * 12 + (hitReaction ? 20 : 0);
     const pulseIntensity = 0.25 + healthFactor * 0.4 + (hitReaction ? 1.0 : 0);
@@ -36,7 +36,7 @@ const Nightflare: React.FC = () => {
       // Stutter/Dim effect during hit
       const flickerScale = hitReaction ? (Math.random() > 0.5 ? 0.6 : 1.4) : 1.0;
       meshRef.current.scale.setScalar(1.3 * pulse * flickerScale);
-      
+
       meshRef.current.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           const mat = child.material as THREE.MeshStandardMaterial;
@@ -65,9 +65,9 @@ const Nightflare: React.FC = () => {
     }
 
     if (groundRingRef.current) {
-        groundRingRef.current.rotation.z = t * (0.5 + healthFactor * 2.5);
-        const mat = groundRingRef.current.material as THREE.MeshStandardMaterial;
-        mat.emissiveIntensity = (5 + Math.sin(t * 7) * 3) * (hitReaction ? 0.15 : 1.0);
+      groundRingRef.current.rotation.z = t * (0.5 + healthFactor * 2.5);
+      const mat = groundRingRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = (5 + Math.sin(t * 7) * 3) * (hitReaction ? 0.15 : 1.0);
     }
 
     if (coreRef.current) {
@@ -105,16 +105,16 @@ const Nightflare: React.FC = () => {
             <octahedronGeometry args={[1.15]} />
             <meshStandardMaterial color="#ffaa00" emissive="#ffee00" emissiveIntensity={8} flatShading />
           </mesh>
-          <mesh rotation={[Math.PI/2, 0, 0]}>
-             <torusGeometry args={[1.9, 0.15, 16, 64]} />
-             <meshStandardMaterial color="#ff9900" emissive="#ffae00" emissiveIntensity={25} />
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[1.9, 0.15, 16, 64]} />
+            <meshStandardMaterial color="#ff9900" emissive="#ffae00" emissiveIntensity={25} />
           </mesh>
         </group>
       </Float>
 
       <pointLight ref={lightRef} position={[0, 4.8, 0]} intensity={15} distance={45} color="#ffae00" castShadow />
 
-      {[...Array(35)].map((_, i) => (
+      {[...Array(65)].map((_, i) => (
         <Ember key={i} index={i} />
       ))}
     </group>
@@ -123,22 +123,31 @@ const Nightflare: React.FC = () => {
 
 const Ember: React.FC<{ index: number }> = ({ index }) => {
   const ref = useRef<THREE.Mesh>(null);
-  const initialPos = [(Math.random() - 0.5) * 4, 2 + Math.random() * 6, (Math.random() - 0.5) * 4];
+  const initialPos = [(Math.random() - 0.5) * 5, 1.5 + Math.random() * 5, (Math.random() - 0.5) * 5];
 
   useFrame((state) => {
-    const t = state.clock.getElapsedTime() + index * 0.9;
+    const t = state.clock.getElapsedTime() + index * 13.5;
     if (ref.current) {
-      ref.current.position.y = 2.2 + (t % 6.5);
-      ref.current.position.x = Math.sin(t * 2.8) * 1.4;
-      ref.current.position.z = Math.cos(t * 3.2) * 1.4;
-      ref.current.scale.setScalar(Math.max(0, 2.2 - (t % 6.5) / 2.8));
+      // Chaotic upward spiral
+      ref.current.position.y = 1.8 + (t % 7.5);
+      const angle = t * (0.8 + (index % 3) * 0.2);
+      const radius = 1.6 + Math.sin(t * 1.5) * 0.5;
+
+      ref.current.position.x = Math.sin(angle) * radius;
+      ref.current.position.z = Math.cos(angle) * radius;
+
+      ref.current.rotation.x = t * 2;
+      ref.current.rotation.y = t * 3;
+
+      const life = (t % 7.5) / 7.5;
+      ref.current.scale.setScalar(Math.max(0, (1 - life) * 3.5 * (Math.random() * 0.5 + 0.5)));
     }
   });
 
   return (
     <mesh ref={ref} position={initialPos as any}>
-      <boxGeometry args={[0.18, 0.18, 0.18]} />
-      <meshStandardMaterial color="#ffae00" emissive="#ffae00" emissiveIntensity={20} />
+      <octahedronGeometry args={[0.08, 0]} />
+      <meshStandardMaterial color="#ff9100" emissive="#ffdd00" emissiveIntensity={30} transparent opacity={0.8} />
     </mesh>
   );
 };

@@ -13,6 +13,11 @@ export enum TimeOfDay {
   NIGHT = 'NIGHT'
 }
 
+export interface GameSettings {
+  soundEnabled: boolean;
+  vibrationEnabled: boolean;
+}
+
 export enum NightEvent {
   NONE = 'NONE',
   RUSH = 'RUSH', // High spawn rate, low HP
@@ -59,6 +64,18 @@ export interface PlayerStats {
     shield: boolean;
     chargedAttack: boolean;
   };
+  weaponLevels: {
+    STAFF: number;
+    SWORD: number;
+    BOW: number;
+  };
+  currentWeapon: 'STAFF' | 'SWORD' | 'BOW';
+}
+
+export enum WeaponType {
+  STAFF = 'STAFF', // Starter
+  SWORD = 'SWORD', // Unlocked at 5000 score
+  BOW = 'BOW',     // Unlocked at 15000 score
 }
 
 export type EnemyClass = 'STALKER' | 'BRUTE' | 'WRAITH' | 'VOID_WALKER';
@@ -93,4 +110,32 @@ export interface Structure {
   health: number;
   maxHealth: number;
   lastActionTime?: number;
+}
+
+export interface UserProfile {
+  name: string;
+  email: string;
+  avatar: string; // URL or preset ID
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  name: string;
+  score: number;
+  wave: string;
+  date: string;
+  avatar: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  content: string;
+  timestamp: number;
+  type: 'CHAT' | 'REQUEST_LIFE' | 'REQUEST_WEAPON' | 'SYSTEM' | 'GIFT';
+  targetId?: string; // For direct gifts/requests
+  requestStatus?: 'PENDING' | 'GRANTED' | 'EXPIRED';
+  weaponType?: WeaponType;
 }

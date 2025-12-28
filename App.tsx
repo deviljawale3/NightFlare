@@ -22,34 +22,36 @@ const SceneLighting: React.FC = () => {
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const directionalRef = useRef<THREE.DirectionalLight>(null);
   const fogRef = useRef<THREE.Fog>(null);
-  
+
   useFrame((_, delta) => {
     const isNight = timeOfDay === TimeOfDay.NIGHT;
     const isMenu = gameState === GameState.MAIN_MENU;
     const isTutorial = gameState === GameState.TUTORIAL;
-    
-    const targetAmbient = isMenu ? 0.65 : (isNight ? 0.2 : 0.8);
-    const targetDirIntensity = isMenu ? 1.5 : (isNight ? 0.4 : 1.8);
-    const targetFogColor = new THREE.Color(isNight && !isMenu ? '#050505' : '#1a2e35');
-    
+
+    // Increased night visibility
+    const targetAmbient = isMenu ? 0.65 : (isNight ? 0.45 : 0.8); // Was 0.2
+    const targetDirIntensity = isMenu ? 1.5 : (isNight ? 0.7 : 1.8); // Was 0.4
+    const targetFogColor = new THREE.Color(isNight && !isMenu ? '#0a0a0a' : '#1a2e35'); // Slightly lighter black
+
     if (ambientRef.current) ambientRef.current.intensity = THREE.MathUtils.lerp(ambientRef.current.intensity, targetAmbient, delta * (isMenu || isTutorial ? 3 : 0.5));
     if (directionalRef.current) directionalRef.current.intensity = THREE.MathUtils.lerp(directionalRef.current.intensity, targetDirIntensity, delta * (isMenu || isTutorial ? 3 : 0.5));
-    
+
     if (fogRef.current) {
-        fogRef.current.color.lerp(targetFogColor, delta * 0.5);
-        fogRef.current.near = THREE.MathUtils.lerp(fogRef.current.near, isNight ? 12 : 25, delta * 0.5);
-        fogRef.current.far = THREE.MathUtils.lerp(fogRef.current.far, isNight ? 40 : 80, delta * 0.5);
+      fogRef.current.color.lerp(targetFogColor, delta * 0.5);
+      // Extended fog distance for better visibility
+      fogRef.current.near = THREE.MathUtils.lerp(fogRef.current.near, isNight ? 18 : 25, delta * 0.5); // Was 12
+      fogRef.current.far = THREE.MathUtils.lerp(fogRef.current.far, isNight ? 65 : 80, delta * 0.5); // Was 40
     }
   });
 
   return (
     <>
       <ambientLight ref={ambientRef} intensity={0.7} />
-      <directionalLight 
+      <directionalLight
         ref={directionalRef}
-        position={[40, 60, 40]} 
-        intensity={1.5} 
-        castShadow 
+        position={[40, 60, 40]}
+        intensity={1.5}
+        castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-camera-left={-40}
         shadow-camera-right={40}
@@ -70,7 +72,7 @@ const App: React.FC = () => {
   const gameState = useGameStore(s => s.gameState);
   const screenShake = useGameStore(s => s.screenShake);
   const saveGame = useGameStore(s => s.saveGame);
-  
+
   const [showInventory, setShowInventory] = useState(false);
   const [showCrafting, setShowCrafting] = useState(false);
 
@@ -88,14 +90,14 @@ const App: React.FC = () => {
   return (
     <div className="fixed inset-0 w-full h-full bg-[#050505] overflow-hidden select-none">
       <AmbientSounds />
-      
+
       {/* 3D RENDER LAYER */}
       <div className="absolute inset-0 w-full h-full z-0 overflow-hidden" style={shakeStyle}>
-        <Canvas 
-          shadows 
-          camera={{ position: [20, 20, 20], fov: 42 }} 
-          gl={{ antialias: true, stencil: false, alpha: false, powerPreference: "high-performance" }} 
-          dpr={[1, 2]}
+        <Canvas
+          shadows
+          camera={{ position: [20, 20, 20], fov: 42 }}
+          gl={{ antialias: true, stencil: false, alpha: false, powerPreference: "high-performance", preserveDrawingBuffer: true }}
+          dpr={[1, 1.5]}
         >
           <SceneLighting />
           <Suspense fallback={null}>
@@ -107,27 +109,27 @@ const App: React.FC = () => {
 
       {/* UI INTERFACE LAYER */}
       <div className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-hidden safe-padding font-['Outfit']">
-        
+
         {/* State-specific UI components */}
         {gameState === GameState.MAIN_MENU && <MainMenu />}
-        
+
         {(gameState === GameState.PLAYING || gameState === GameState.PAUSED || gameState === GameState.TUTORIAL || gameState === GameState.LEVEL_CLEAR) && (
-          <HUD 
-            onOpenInventory={() => setShowInventory(true)} 
+          <HUD
+            onOpenInventory={() => setShowInventory(true)}
             onOpenCrafting={() => setShowCrafting(true)}
           />
         )}
-        
+
         {gameState === GameState.PAUSED && <PauseMenu />}
         {gameState === GameState.GAME_OVER && <GameOver />}
         {gameState === GameState.TUTORIAL && <TutorialOverlay />}
         {gameState === GameState.LEVEL_CLEAR && <LevelClearMenu />}
-        
+
         {/* Modals */}
         <CraftingMenu isOpen={showCrafting} onClose={() => setShowCrafting(false)} />
         {showInventory && <InventoryPanel onClose={() => setShowInventory(false)} />}
       </div>
-      
+
       {gameState === GameState.PLAYING && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/5 text-[10px] font-black tracking-[0.6em] uppercase pointer-events-none drop-shadow-md">
           Nightflare Core Protection Protocol Active

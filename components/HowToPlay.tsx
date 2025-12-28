@@ -1,5 +1,5 @@
-
 import React from 'react';
+import DeeJayLabsLogo from './DeeJayLabsLogo';
 
 interface HowToPlayProps {
   onBack: () => void;
@@ -12,7 +12,7 @@ const HowToPlay: React.FC<HowToPlayProps> = ({ onBack }) => {
         <h2 className="text-4xl font-black text-white italic tracking-tighter mb-6 text-center">
           HOW TO <span className="text-orange-500">PLAY</span>
         </h2>
-        
+
         <div className="space-y-6 text-white/80">
           <section>
             <h3 className="text-xs font-black text-orange-500 uppercase tracking-widest mb-2 flex items-center gap-2">
@@ -51,12 +51,16 @@ const HowToPlay: React.FC<HowToPlayProps> = ({ onBack }) => {
           </section>
         </div>
 
-        <button 
+        <button
           onClick={onBack}
           className="mt-10 w-full bg-white text-slate-950 py-4 rounded-2xl font-black text-xl hover:scale-105 active:scale-95 transition-all shadow-xl"
         >
           BACK TO MENU
         </button>
+
+        <div className="mt-8 flex justify-center opacity-70">
+          <DeeJayLabsLogo />
+        </div>
       </div>
     </div>
   );

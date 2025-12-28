@@ -70,7 +70,7 @@ const Player: React.FC = () => {
         setTimeout(() => {
           if (groupRef.current) {
             window.dispatchEvent(new CustomEvent('player-attack-hitbox', {
-              detail: { position: groupRef.current.position.clone(), range: playerStats.attackRange + 3.2, damage: playerStats.attackDamage * (1 + combo * 0.25) }
+              detail: { position: groupRef.current.position.clone(), range: playerStats.attackRange + 4.5, damage: playerStats.attackDamage * (1 + combo * 0.25) }
             }));
           }
         }, 110);
@@ -131,11 +131,17 @@ const Player: React.FC = () => {
     const inputMag = Math.sqrt(mX * mX + mZ * mZ);
     const isMoving = inputMag > 0.1;
 
+    // Smooth movement transition
     moveLerp.current = THREE.MathUtils.lerp(moveLerp.current, isMoving ? 1 : 0, delta * 12);
 
     if (isMoving) {
       const targetHeading = Math.atan2(mX, mZ);
-      lastHeading.current = THREE.MathUtils.lerp(lastHeading.current, targetHeading, 0.25);
+      lastHeading.current = THREE.MathUtils.lerp(lastHeading.current, targetHeading, 0.25); // Snappier turn (was 0.18)
+
+      // Dynamic Tilt into Turn
+      const turnDiff = lastHeading.current - targetHeading;
+      const tilt = Math.max(-0.25, Math.min(0.25, turnDiff * 1.5));
+      groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, tilt, 0.1);
       groupRef.current.rotation.y = lastHeading.current;
 
       let speedMult = 1.0;
@@ -144,6 +150,9 @@ const Player: React.FC = () => {
       const speed = playerStats.speed * delta * (0.85 + 0.15 * inputMag) * speedMult;
       groupRef.current.position.x += Math.sin(lastHeading.current) * speed;
       groupRef.current.position.z += Math.cos(lastHeading.current) * speed;
+    } else {
+      // Return to upright when stopped
+      groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, 0, 0.1);
     }
 
     (window as any).playerPos = groupRef.current.position.clone();
@@ -159,27 +168,58 @@ const Player: React.FC = () => {
       }
     }
 
-    // Polished Camera: Closer for cinematic action feel
+    // Polished Camera: Closer/Bouncier - Snappier follow
     const targetCamPos = new THREE.Vector3(groupRef.current.position.x + 10, groupRef.current.position.y + 14, groupRef.current.position.z + 10);
-    camera.position.lerp(targetCamPos, 0.1);
+    camera.position.lerp(targetCamPos, 0.12); // Snappier camera (was 0.08)
     camera.lookAt(groupRef.current.position.x, groupRef.current.position.y + 0.5, groupRef.current.position.z);
 
-    const freq = isMoving ? (inputMag > 0.8 ? 20 : 14) : 2.5;
+    const freq = isMoving ? (inputMag > 0.8 ? 18 : 12) : 2.0;
     const cycle = Math.sin(t * freq);
+    const cosCycle = Math.cos(t * freq);
 
     if (meshGroupRef.current && hipsRef.current && torsoRef.current) {
-      hipsRef.current.position.y = 0.9 + moveLerp.current * (Math.abs(cycle) * 0.12);
+      // Run Bob
+      hipsRef.current.position.y = 0.9 + moveLerp.current * (Math.abs(cycle) * 0.15);
+      // Run Sway
+      hipsRef.current.rotation.z = Math.sin(t * freq * 0.5) * 0.1 * moveLerp.current;
 
-      if (rightArmRef.current) {
+      if (rightArmRef.current && leftArmRef.current && leftLegRef.current && rightLegRef.current) {
         if (attacking) {
           attackTimer.current += delta;
-          const prog = Math.min(1, attackTimer.current / 0.32);
-          const strikeCurve = Math.sin(prog * Math.PI);
-          rightArmRef.current.rotation.x = -Math.PI / 1.1 + (strikeCurve * 1.5);
-          rightArmRef.current.rotation.y = strikeCurve * 0.4;
+          const duration = 0.32;
+          const prog = Math.min(1, attackTimer.current / duration);
+
+          // 2-Stage Attack: Windup -> Strike
+          if (prog < 0.3) {
+            // Windup (Back)
+            const windup = prog / 0.3;
+            rightArmRef.current.rotation.x = THREE.MathUtils.lerp(-0.5, -2.5, windup);
+            rightArmRef.current.rotation.z = 0.8;
+            torsoRef.current.rotation.y = 0.5 * windup;
+          } else {
+            // Strike (Forward Snap)
+            const strike = (prog - 0.3) / 0.7;
+            // Elastic ease out
+            const snap = Math.sin(strike * Math.PI * 0.8);
+            rightArmRef.current.rotation.x = -2.5 + snap * 4.0;
+            rightArmRef.current.rotation.z = 0.2;
+            torsoRef.current.rotation.y = 0.5 - strike * 1.0; // Twist body into hit
+          }
         } else {
-          rightArmRef.current.rotation.x = moveLerp.current * (cycle * 0.7);
-          rightArmRef.current.rotation.z = 0.15 + moveLerp.current * 0.1;
+          // Idle/Run Animations
+          // Arms Counter-Swing
+          rightArmRef.current.rotation.x = moveLerp.current * (cosCycle * 0.8);
+          rightArmRef.current.rotation.z = 0.1 + moveLerp.current * 0.1;
+
+          leftArmRef.current.rotation.x = moveLerp.current * (-cosCycle * 0.8);
+          leftArmRef.current.rotation.z = -0.1 - moveLerp.current * 0.1;
+
+          // Legs
+          rightLegRef.current.rotation.x = moveLerp.current * (-cosCycle * 0.8);
+          leftLegRef.current.rotation.x = moveLerp.current * (cosCycle * 0.8);
+
+          // Reset Spine
+          torsoRef.current.rotation.y = 0;
         }
       }
     }
@@ -199,57 +239,77 @@ const Player: React.FC = () => {
       <group ref={meshGroupRef}>
         <group ref={hipsRef} position={[0, 0.9, 0]}>
 
-          {/* Cowboy Body */}
+          {/* Human Body - Improved Proportions */}
           <group ref={torsoRef} position={[0, 0.1, 0]}>
-            <mesh castShadow>
-              <cylinderGeometry args={[0.38, 0.32, 1.1, 6]} />
-              {getMat("#4e342e")} {/* Dark Brown Vest */}
+            {/* Torso/Vest - Cream Color */}
+            <mesh castShadow position={[0, 0.1, 0]}>
+              <cylinderGeometry args={[0.34, 0.28, 0.9, 8]} />
+              {getMat("#F5F5DC")} {/* CREME COLOR VEST */}
             </mesh>
 
-            <mesh position={[0, 0.52, 0.1]} rotation={[0.2, 0, 0]}>
-              <coneGeometry args={[0.32, 0.3, 3]} />
-              {getMat("#d32f2f")} {/* Red Bandana */}
+            {/* Neck Scarf/Bandana */}
+            <mesh position={[0, 0.62, 0.1]} rotation={[0.2, 0, 0]}>
+              <coneGeometry args={[0.28, 0.25, 2.5]} />
+              {getMat("#d32f2f")}
             </mesh>
 
-            {/* Cowboy Head & Signature Hat */}
-            <group ref={neckRef} position={[0, 0.75, 0]}>
+            {/* Head & Face */}
+            <group ref={neckRef} position={[0, 0.85, 0]}>
               <mesh castShadow>
-                <sphereGeometry args={[0.35, 12, 12]} />
+                <sphereGeometry args={[0.3, 16, 16]} />
                 {getMat("#e0ac69")} {/* Skin Tone */}
               </mesh>
 
-              <group position={[0, 0.25, 0]}>
-                {/* Hat Brim */}
+              {/* Face Details (Eyes) */}
+              <mesh position={[0.1, 0.05, 0.22]}>
+                <sphereGeometry args={[0.03]} />
+                <meshBasicMaterial color="#000" />
+              </mesh>
+              <mesh position={[-0.1, 0.05, 0.22]}>
+                <sphereGeometry args={[0.03]} />
+                <meshBasicMaterial color="#000" />
+              </mesh>
+
+              <group position={[0, 0.2, 0]}>
+                {/* Hat */}
                 <mesh position={[0, 0.05, 0]} rotation={[-0.05, 0, 0]}>
-                  <cylinderGeometry args={[0.85, 0.85, 0.08, 16]} />
-                  {getMat("#2b1d1a")}
+                  <cylinderGeometry args={[0.95, 0.95, 0.05, 16]} />
+                  {getMat("#3e2723")}
                 </mesh>
-                {/* Hat Crown */}
                 <mesh position={[0, 0.25, 0]}>
-                  <cylinderGeometry args={[0.38, 0.42, 0.45, 6]} />
-                  {getMat("#2b1d1a")}
+                  <cylinderGeometry args={[0.38, 0.42, 0.4, 12]} />
+                  {getMat("#3e2723")}
                 </mesh>
               </group>
             </group>
 
-            {/* Arms */}
-            <group ref={leftArmRef} position={[-0.5, 0.4, 0]}>
-              <mesh position={[0, -0.32, 0]} castShadow>
-                <cylinderGeometry args={[0.1, 0.08, 0.85]} />
-                {getMat("#5d4037")}
+            {/* Arms - Segmented */}
+            <group ref={leftArmRef} position={[-0.45, 0.45, 0]}>
+              <mesh position={[0, -0.3, 0]} castShadow>
+                <cylinderGeometry args={[0.09, 0.07, 0.7]} />
+                {getMat("#d7ccc8")} {/* Sleeve/Skin mix */}
+              </mesh>
+              <mesh position={[0, -0.7, 0]} castShadow>
+                <sphereGeometry args={[0.08]} />
+                {getMat("#e0ac69")} {/* Hand */}
               </mesh>
             </group>
 
-            <group ref={rightArmRef} position={[0.5, 0.4, 0]}>
-              <mesh position={[0, -0.32, 0]} castShadow>
-                <cylinderGeometry args={[0.1, 0.08, 0.85]} />
-                {getMat("#5d4037")}
+            <group ref={rightArmRef} position={[0.45, 0.45, 0]}>
+              <mesh position={[0, -0.3, 0]} castShadow>
+                <cylinderGeometry args={[0.09, 0.07, 0.7]} />
+                {getMat("#d7ccc8")}
               </mesh>
-              {/* Lasso Enchanted Staff */}
-              <group ref={weaponRef} position={[0, -0.65, 0.5]} rotation={[Math.PI / 2, 0, 0]}>
-                <mesh castShadow><cylinderGeometry args={[0.045, 0.045, 4.2]} /><meshStandardMaterial color="#3e2723" /></mesh>
-                <mesh position={[0, 2.05, 0]}>
-                  <octahedronGeometry args={[0.4]} />
+              <mesh position={[0, -0.7, 0]} castShadow>
+                <sphereGeometry args={[0.08]} />
+                {getMat("#e0ac69")} {/* Hand */}
+              </mesh>
+
+              {/* Weapon: Enchanted Staff - Refined */}
+              <group ref={weaponRef} position={[0, -0.6, 0.3]} rotation={[Math.PI / 2, 0, 0]}>
+                <mesh castShadow><cylinderGeometry args={[0.03, 0.03, 3.8, 8]} /><meshStandardMaterial color="#3e2723" /></mesh>
+                <mesh position={[0, 1.9, 0]}>
+                  <dodecahedronGeometry args={[0.35, 0]} />
                   <meshStandardMaterial color="#ffcc00" emissive="#ffaa00" emissiveIntensity={60 + combo * 40} />
                 </mesh>
                 {(attacking || damagedFlashing) && <pointLight color="#ffcc00" intensity={120} distance={22} />}
@@ -257,24 +317,24 @@ const Player: React.FC = () => {
             </group>
           </group>
 
-          {/* Cowboy Legs */}
-          <group ref={leftLegRef} position={[-0.22, 0, 0]}>
-            <mesh position={[0, -0.45, 0]} castShadow>
-              <cylinderGeometry args={[0.16, 0.13, 1]} />
-              {getMat("#263238")} {/* Blue Jeans */}
+          {/* Legs - Segmented */}
+          <group ref={leftLegRef} position={[-0.2, 0, 0]}>
+            <mesh position={[0, -0.4, 0]} castShadow>
+              <cylinderGeometry args={[0.13, 0.1, 0.9]} />
+              {getMat("#263238")} {/* Jeans */}
             </mesh>
-            <mesh position={[0, -0.9, 0.12]} castShadow>
-              <boxGeometry args={[0.22, 0.18, 0.4]} />
+            <mesh position={[0, -0.9, 0.1]} castShadow>
+              <boxGeometry args={[0.2, 0.15, 0.35]} />
               {getMat("#1a1a1a")} {/* Boots */}
             </mesh>
           </group>
-          <group ref={rightLegRef} position={[0.22, 0, 0]}>
-            <mesh position={[0, -0.45, 0]} castShadow>
-              <cylinderGeometry args={[0.16, 0.13, 1]} />
+          <group ref={rightLegRef} position={[0.2, 0, 0]}>
+            <mesh position={[0, -0.4, 0]} castShadow>
+              <cylinderGeometry args={[0.13, 0.1, 0.9]} />
               {getMat("#263238")}
             </mesh>
-            <mesh position={[0, -0.9, 0.12]} castShadow>
-              <boxGeometry args={[0.22, 0.18, 0.4]} />
+            <mesh position={[0, -0.9, 0.1]} castShadow>
+              <boxGeometry args={[0.2, 0.15, 0.35]} />
               {getMat("#1a1a1a")}
             </mesh>
           </group>

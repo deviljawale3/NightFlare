@@ -37,23 +37,23 @@ const TutorialOverlay: React.FC = () => {
   if (!current) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[80] pointer-events-none p-6">
-      <div className="bg-[#0a0f1a] border border-white/10 p-10 rounded-[2.5rem] max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,1)] pointer-events-auto text-center animate-in zoom-in duration-300 flex flex-col items-center">
-        
+    <div className="fixed inset-0 flex flex-col items-center justify-start pt-24 sm:pt-32 bg-black/50 z-[80] pointer-events-none p-6">
+      <div className="bg-[#0a0f1a] border border-white/10 p-8 sm:p-10 rounded-[2.5rem] max-w-sm w-full shadow-[0_20px_60px_rgba(0,0,0,1)] pointer-events-auto text-center animate-in zoom-in duration-300 flex flex-col items-center relative">
+
         <div className="text-orange-500 font-black text-[10px] sm:text-[11px] uppercase tracking-[0.4em] mb-3 italic">
           PHASE {tutorialStep + 1}
         </div>
-        
+
         <h2 className="text-white text-4xl sm:text-5xl font-black mb-6 italic tracking-tighter uppercase leading-none">
           {current.title}
         </h2>
-        
+
         <p className="text-white/60 text-sm font-medium leading-relaxed mb-10 px-2">
           {current.desc}
         </p>
-        
+
         {current.button && (
-          <button 
+          <button
             onClick={() => current.action && current.action()}
             className="w-full bg-white text-black py-5 rounded-2xl font-black text-xl shadow-2xl active:scale-95 hover:bg-slate-100 transition-all mb-8 uppercase italic tracking-tight"
           >

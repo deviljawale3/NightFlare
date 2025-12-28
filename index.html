@@ -1,10 +1,13 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Nightflare</title>
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NightFlare: Eternal Shadow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
@@ -17,7 +20,9 @@
             padding: 0;
             touch-action: none;
         }
-        html, body {
+
+        html,
+        body {
             width: 100%;
             height: 100%;
             overflow: hidden;
@@ -30,29 +35,35 @@
             right: 0;
             bottom: 0;
         }
+
         #root {
             width: 100%;
             height: 100%;
             display: block;
             position: relative;
         }
+
         canvas {
             display: block;
             touch-action: none;
             width: 100% !important;
             height: 100% !important;
         }
+
         /* Custom scrollbar for menus if content overflows */
         .custom-scrollbar::-webkit-scrollbar {
             width: 4px;
         }
+
         .custom-scrollbar::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, 0.05);
         }
+
         .custom-scrollbar::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.1);
             border-radius: 2px;
         }
+
         /* Safe area padding for HUD */
         .safe-padding {
             padding-top: env(safe-area-inset-top);
@@ -60,8 +71,106 @@
             padding-left: env(safe-area-inset-left);
             padding-right: env(safe-area-inset-right);
         }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes zoomIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes slideInBottom {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideInLeft {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        .animate-in {
+            animation-duration: 0.3s;
+            animation-fill-mode: both;
+            animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .fade-in {
+            animation-name: fadeIn;
+        }
+
+        .zoom-in {
+            animation-name: zoomIn;
+        }
+
+        .slide-in-from-bottom-10 {
+            animation-name: slideInBottom;
+        }
+
+        .slide-in-from-bottom-2 {
+            animation-name: slideInBottom;
+        }
+
+        .slide-in-from-left-4 {
+            animation-name: slideInLeft;
+        }
+
+        .zoom-in-95 {
+            animation-name: zoomIn;
+        }
+
+        /* Tailwind-like utils if missing from CDN */
+        .backdrop-blur-xl {
+            -webkit-backdrop-filter: blur(24px);
+            backdrop-filter: blur(24px);
+        }
+
+        .backdrop-blur-md {
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+        }
     </style>
-<script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@19.0.0",
@@ -77,10 +186,11 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
+
 <body>
     <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>

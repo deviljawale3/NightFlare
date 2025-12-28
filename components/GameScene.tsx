@@ -96,10 +96,14 @@ const GameScene: React.FC = () => {
     <group>
       <Island />
       <Nightflare />
-      <Structures />
-      <Player />
-      <ResourceNodes />
-      {timeOfDay === TimeOfDay.NIGHT && <Enemies />}
+      {gameState !== GameState.MAIN_MENU && (
+        <>
+          <Structures />
+          <Player />
+          <ResourceNodes />
+        </>
+      )}
+      {timeOfDay === TimeOfDay.NIGHT && gameState !== GameState.MAIN_MENU && <Enemies />}
 
       {novaVisual && <NovaVFX />}
 
@@ -165,7 +169,8 @@ const BeamEffect: React.FC<{ from: [number, number, number], to: [number, number
   const points = useMemo(() => [new THREE.Vector3(...from), new THREE.Vector3(...to)], [from, to]);
   const lineGeometry = useMemo(() => new THREE.BufferGeometry().setFromPoints(points), [points]);
   return (
-    <line geometry={lineGeometry}>
+    <line>
+      <primitive object={lineGeometry} attach="geometry" />
       <lineBasicMaterial color="#00f2ff" linewidth={6} transparent opacity={0.9} />
     </line>
   );

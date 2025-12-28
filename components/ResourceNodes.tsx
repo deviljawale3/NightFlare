@@ -6,7 +6,7 @@ import { useGameStore } from '../store';
 import { ResourceNode, GameState, TimeOfDay } from '../types';
 
 const ResourceNodes: React.FC = () => {
-  const { addResource, wave, gameState, nodes, setNodes, removeNode, timeOfDay, settings } = useGameStore();
+  const { addResource, wave, level, gameState, nodes, setNodes, removeNode, timeOfDay, settings } = useGameStore();
   const lastRespawnCheck = useRef(0);
 
   useEffect(() => {
@@ -16,42 +16,42 @@ const ResourceNodes: React.FC = () => {
 
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const radius = 5 + Math.random() * 16; 
+      const radius = 5 + Math.random() * 16;
       const type = types[Math.floor(Math.random() * types.length)];
-      
+
       newNodes.push({
-        id: `node-${wave}-${i}-${Math.random()}`,
+        id: `node-${level}-${wave}-${i}-${Math.random()}`,
         type,
         position: [Math.cos(angle) * radius, 0, Math.sin(angle) * radius],
         health: 1
       });
     }
     setNodes(newNodes);
-  }, [wave, setNodes]);
+  }, [level, wave, setNodes]);
 
   useFrame((state) => {
     if (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) return;
-    
+
     const t = state.clock.getElapsedTime();
     if (t - lastRespawnCheck.current > 6) {
       lastRespawnCheck.current = t;
       const currentNodes = useGameStore.getState().nodes;
       const minNodes = timeOfDay === TimeOfDay.DAY ? 60 : 40;
-      
+
       if (currentNodes.length < minNodes) {
         const count = 8;
         const types: ResourceNode['type'][] = ['TREE', 'ROCK', 'CRYSTAL', 'FOOD'];
         const respawned = [];
         for (let i = 0; i < count; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const radius = 5 + Math.random() * 15;
-            const type = types[Math.floor(Math.random() * types.length)];
-            respawned.push({
-              id: `node-resp-${t}-${i}`,
-              type,
-              position: [Math.cos(angle) * radius, 0, Math.sin(angle) * radius] as [number, number, number],
-              health: 1
-            });
+          const angle = Math.random() * Math.PI * 2;
+          const radius = 5 + Math.random() * 15;
+          const type = types[Math.floor(Math.random() * types.length)];
+          respawned.push({
+            id: `node-resp-${t}-${i}`,
+            type,
+            position: [Math.cos(angle) * radius, 0, Math.sin(angle) * radius] as [number, number, number],
+            health: 1
+          });
         }
         setNodes([...currentNodes, ...respawned]);
       }
@@ -62,7 +62,7 @@ const ResourceNodes: React.FC = () => {
     const handleHarvestEvent = (e: any) => {
       const { position, range } = e.detail;
       const hitPos = position as THREE.Vector3;
-      
+
       const currentNodes = useGameStore.getState().nodes;
       currentNodes.forEach(node => {
         const nodePos = new THREE.Vector3(...node.position);
@@ -84,7 +84,7 @@ const ResourceNodes: React.FC = () => {
       CRYSTAL: 'lightShards',
       FOOD: 'food'
     };
-    
+
     addResource(resourceMap[type], yieldAmount, pos);
     removeNode(id);
     if (settings.vibrationEnabled && 'vibrate' in navigator) navigator.vibrate(30);
@@ -108,7 +108,7 @@ const NodeItem: React.FC<{ data: ResourceNode; onHarvest: () => void }> = ({ dat
     // Subtle breathing animation
     meshRef.current.position.y = Math.sin(t * 1.5 + data.position[0]) * 0.15;
     if (data.type === 'CRYSTAL' || data.type === 'FOOD') {
-        meshRef.current.rotation.y = t * 0.5;
+      meshRef.current.rotation.y = t * 0.5;
     }
   });
 
@@ -136,7 +136,7 @@ const NodeItem: React.FC<{ data: ResourceNode; onHarvest: () => void }> = ({ dat
           </mesh>
         </group>
       )}
-      
+
       {data.type === 'ROCK' && (
         <group scale={2.5}>
           <mesh castShadow position={[0, 0.6, 0]}>
@@ -156,7 +156,7 @@ const NodeItem: React.FC<{ data: ResourceNode; onHarvest: () => void }> = ({ dat
             <octahedronGeometry args={[0.65]} />
             <meshStandardMaterial color="#00e5ff" emissive="#00b0ff" emissiveIntensity={40} flatShading />
           </mesh>
-          <mesh position={[0, 0, 0]} scale={0.8} rotation={[Math.PI/4, 0, Math.PI/4]}>
+          <mesh position={[0, 0, 0]} scale={0.8} rotation={[Math.PI / 4, 0, Math.PI / 4]}>
             <octahedronGeometry args={[0.65]} />
             <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={80} transparent opacity={0.4} />
           </mesh>
@@ -171,9 +171,9 @@ const NodeItem: React.FC<{ data: ResourceNode; onHarvest: () => void }> = ({ dat
             <boxGeometry args={[0.6, 0.6, 0.6]} />
             <meshStandardMaterial color="#ff5252" emissive="#ff1744" emissiveIntensity={10} flatShading />
           </mesh>
-          <mesh scale={0.65} rotation={[Math.PI/2, 0, Math.PI/4]}>
-             <boxGeometry args={[0.8, 0.8, 0.8]} />
-             <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={60} transparent opacity={0.5} />
+          <mesh scale={0.65} rotation={[Math.PI / 2, 0, Math.PI / 4]}>
+            <boxGeometry args={[0.8, 0.8, 0.8]} />
+            <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={60} transparent opacity={0.5} />
           </mesh>
           <pointLight intensity={8} distance={8} color="#ff1744" />
         </group>

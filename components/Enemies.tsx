@@ -275,7 +275,7 @@ const Enemies: React.FC = () => {
             // Damage Check
             const dmg = (enemy.type === 'BRUTE' ? 350 : 100) * (1 + level * 0.4);
             if (currentPos.distanceTo(playerPos) < 4.0) {
-              damagePlayer(dmg * 0.4);
+              damagePlayer(dmg * 0.15); // Reduced damage for fair play (was 0.4)
               if (enemy.type === 'BRUTE') triggerScreenShake(1.2);
             } else if (distToCore < 12) {
               damageNightflare(dmg * 0.3);
@@ -364,8 +364,8 @@ const ZombieModel: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
   useFrame((state) => {
     if (!ref.current || !meshRef.current || !hipsRef.current) return;
 
-    // Sync Position from Entity
-    ref.current.position.set(entity.position[0], entity.position[1], entity.position[2]);
+    // Sync Position with slight interpolation for smoothness
+    ref.current.position.lerp(new THREE.Vector3(...entity.position), 0.2);
 
     const t = state.clock.getElapsedTime() + seed;
     const isDying = entity.dying;
@@ -374,68 +374,126 @@ const ZombieModel: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
       meshRef.current.visible = false;
       if (shardsRef.current) {
         shardsRef.current.visible = true;
-        const dp = (performance.now() - entity.deathTime) / 1200;
+        const dp = (performance.now() - entity.deathTime) / 1000;
+
+        // Explosive Death Effect
         shardsRef.current.children.forEach((shard, i) => {
-          shard.position.y += dp * 4;
-          shard.position.x += Math.sin(i + dp * 5 + seed) * 0.1;
-          shard.position.z += Math.cos(i + dp * 5 + seed) * 0.1;
+          const angle = (i / 6) * Math.PI * 2;
+          const explodeSpeed = 4 + (seed % 2);
+
+          shard.position.x += Math.cos(angle + seed) * explodeSpeed * 0.016;
+          shard.position.z += Math.sin(angle + seed) * explodeSpeed * 0.016;
+          shard.position.y += (explodeSpeed * 0.02) - (dp * dp * 9.8 * 0.05); // Gravity parabolic arc
+
+          if (shard.position.y < 0) shard.position.y = 0; // Bounce/Floor
+
+          shard.rotation.x += 0.2;
+          shard.rotation.z += 0.2;
           shard.scale.setScalar(Math.max(0, 1 - dp));
-          shard.rotation.x += 0.1;
         });
       }
       return;
     }
 
-    // Rotation
+    // Rotation with turn banking (leaning into turns)
     const targetRotation = Math.atan2(entity.lastVelocity.x, entity.lastVelocity.z);
-    ref.current.rotation.y = THREE.MathUtils.lerp(ref.current.rotation.y, targetRotation, 0.2);
+    // Shortest path angle interpolation
+    let rotDiff = targetRotation - ref.current.rotation.y;
+    while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+    while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+    ref.current.rotation.y += rotDiff * 0.15;
 
+    // Animation States
     const isMoving = entity.behavior !== EnemyBehavior.ATTACK;
-    const gaitSpeed = entity.behavior === EnemyBehavior.CHASE ? 14 : 6;
-    const limp = Math.sin(t * gaitSpeed);
+    const isChasing = entity.behavior === EnemyBehavior.CHASE;
+    const gaitSpeed = isChasing ? 12 : 5;
 
-    hipsRef.current.position.y = 1.0 + Math.abs(limp) * 0.1;
-    hipsRef.current.rotation.z = Math.sin(t * gaitSpeed) * 0.1;
-    hipsRef.current.rotation.x = 0.2 + Math.sin(t * gaitSpeed * 0.5) * 0.1;
+    // Uneven "Zombie" Limp Lurch (using powered sine wave)
+    const rawCycle = Math.sin(t * gaitSpeed);
+    const limpCycle = Math.sign(rawCycle) * Math.pow(Math.abs(rawCycle), 0.6);
+
+    hipsRef.current.position.y = 1.0 + Math.abs(limpCycle) * 0.15;
+    hipsRef.current.rotation.z = limpCycle * 0.15; // Side sway
+    hipsRef.current.rotation.x = 0.25 + Math.abs(limpCycle) * 0.1; // Forward hunch bounce
 
     if (leftLegRef.current && rightLegRef.current) {
-      leftLegRef.current.rotation.x = Math.sin(t * gaitSpeed) * 0.6;
-      rightLegRef.current.rotation.x = -Math.sin(t * gaitSpeed) * 0.6;
+      // Dragging leg effect
+      leftLegRef.current.rotation.x = limpCycle * 0.8;
+      rightLegRef.current.rotation.x = -limpCycle * 0.8;
+
+      // Knees bending
+      leftLegRef.current.rotation.z = 0.1;
+      rightLegRef.current.rotation.z = -0.1;
     }
 
     if (leftArmRef.current && rightArmRef.current && torsoRef.current) {
       if (entity.attackPhase === 'WINDUP') {
-        const windupProg = Math.sin(t * 20);
-        torsoRef.current.rotation.x = -0.2 - windupProg * 0.1;
-        leftArmRef.current.rotation.x = -Math.PI / 1.5;
-        rightArmRef.current.rotation.x = -Math.PI / 1.5;
+        const windupProg = Math.sin(t * 15);
+        torsoRef.current.rotation.x = -0.4 - windupProg * 0.1;
+        // Raise arms high
+        leftArmRef.current.rotation.x = -Math.PI / 1.1;
+        rightArmRef.current.rotation.x = -Math.PI / 1.1;
+        leftArmRef.current.rotation.z = -0.5;
+        rightArmRef.current.rotation.z = 0.5;
       } else if (entity.attackPhase === 'STRIKE') {
-        torsoRef.current.rotation.x = 0.4;
-        leftArmRef.current.rotation.x = 0;
-        rightArmRef.current.rotation.x = 0;
+        // Lunge forward
+        torsoRef.current.rotation.x = 0.6;
+        leftArmRef.current.rotation.x = 0.2;
+        rightArmRef.current.rotation.x = 0.2;
+        leftArmRef.current.rotation.z = 0.2;
+        rightArmRef.current.rotation.z = -0.2;
       } else {
-        leftArmRef.current.rotation.x = -Math.PI / 2 + Math.sin(t * gaitSpeed) * 0.2;
-        rightArmRef.current.rotation.x = -Math.PI / 2 - Math.cos(t * gaitSpeed) * 0.2;
+        // Zombie Arms (reaching out)
+        const armWaver = Math.sin(t * 3) * 0.2;
+        leftArmRef.current.rotation.x = -Math.PI / 1.9 + armWaver;
+        rightArmRef.current.rotation.x = -Math.PI / 1.9 - armWaver;
+
+        leftArmRef.current.rotation.z = 0.2 + Math.cos(t * 4) * 0.1;
+        rightArmRef.current.rotation.z = -0.2 - Math.cos(t * 4) * 0.1;
+
+        // Reset Spine
+        torsoRef.current.rotation.x = 0.2;
       }
     }
 
-    // Hit Flash check
-    const isHit = (performance.now() - entity.hitTime) < 150;
-    if (isHit) {
-      meshRef.current.position.x = (Math.random() - 0.5) * 0.2;
+    // Hit Recoil Animation
+    const timeSinceHit = performance.now() - entity.hitTime;
+    if (timeSinceHit < 180) {
+      // Shake and flash
+      const recoil = (180 - timeSinceHit) / 180;
+      meshRef.current.position.x = (Math.random() - 0.5) * 0.3 * recoil;
+      meshRef.current.position.z = -0.4 * recoil; // Knockback visual
+      meshRef.current.rotation.x = -0.5 * recoil; // Reel back
+
+      meshRef.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          child.material.emissive.setHex(0xffffff);
+          child.material.emissiveIntensity = 3 * recoil;
+        }
+      });
     } else {
       meshRef.current.position.x = 0;
+      meshRef.current.position.z = 0;
+      // Reset emissive
+      meshRef.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          child.material.emissive.setHex(0x000000);
+          child.material.emissiveIntensity = 0;
+        }
+      });
     }
   });
 
   const getZombieSkin = () => {
     if (islandTheme === IslandTheme.VOLCANO) return "#d84315";
     if (islandTheme === IslandTheme.ARCTIC) return "#81d4fa";
-    return "#8bc34a";
+    return "#7CB342"; // Rotten Green
   };
 
-  const baseScale = entity.type === 'BRUTE' ? 1.8 : 1.0;
+  const baseScale = entity.type === 'BRUTE' ? 1.5 : 1.0;
   const finalScale = baseScale * scaleVar;
+
+  const skinColor = getZombieSkin();
 
   return (
     <group ref={ref}>
@@ -443,47 +501,72 @@ const ZombieModel: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
         {[...Array(6)].map((_, i) => (
           <mesh key={i} position={[Math.random() - 0.5, 1, Math.random() - 0.5]} castShadow>
             <boxGeometry args={[0.3, 0.3, 0.3]} />
-            <meshStandardMaterial color={getZombieSkin()} />
+            <meshStandardMaterial color={skinColor} />
           </mesh>
         ))}
       </group>
 
       <group ref={meshRef} scale={finalScale}>
         <group ref={hipsRef} position={[0, 0.9, 0]}>
-          <mesh castShadow>
-            <boxGeometry args={[0.45, 0.3, 0.35]} />
-            <meshStandardMaterial color={shirtColor} />
-          </mesh>
+
+          {/* Humanoid Body Structure */}
           <group ref={torsoRef} position={[0, 0.15, 0]}>
-            <mesh position={[0, 0.45, 0]} castShadow>
-              <boxGeometry args={[0.5, 0.7, 0.3]} />
+            {/* Tattered Shirt/Torso */}
+            <mesh position={[0, 0.35, 0]} castShadow>
+              <cylinderGeometry args={[0.3, 0.28, 0.7, 8]} />
               <meshStandardMaterial color={shirtColor} />
             </mesh>
-            <mesh position={[0.1, 0.5, 0.16]}>
-              <boxGeometry args={[0.2, 0.3, 0.05]} />
-              <meshStandardMaterial color="#5d0a0a" />
+
+            {/* Spine/Exposed Rot (detail) */}
+            <mesh position={[0.1, 0.4, 0.16]}>
+              <sphereGeometry args={[0.08]} />
+              <meshStandardMaterial color="#3e0000" />
             </mesh>
-            <group ref={headRef} position={[0, 0.9, 0.1]}>
+
+            <group ref={headRef} position={[0, 0.8, 0.05]}>
               <mesh castShadow>
-                <boxGeometry args={[0.35, 0.35, 0.35]} />
-                <meshStandardMaterial color={getZombieSkin()} />
+                <sphereGeometry args={[0.26, 12, 12]} />
+                <meshStandardMaterial color={skinColor} />
               </mesh>
-              <mesh position={[0.08, 0.05, 0.18]}><planeGeometry args={[0.06, 0.06]} /><meshBasicMaterial color="red" /></mesh>
-              <mesh position={[-0.08, 0.05, 0.18]}><planeGeometry args={[0.06, 0.06]} /><meshBasicMaterial color="red" /></mesh>
+              {/* Glowing Eyes */}
+              <mesh position={[0.08, 0.05, 0.22]}>
+                <sphereGeometry args={[0.03]} />
+                <meshBasicMaterial color="#ff0000" toneMapped={false} />
+              </mesh>
+              <mesh position={[-0.08, 0.05, 0.22]}>
+                <sphereGeometry args={[0.03]} />
+                <meshBasicMaterial color="#ff0000" toneMapped={false} />
+              </mesh>
             </group>
-            <group ref={leftArmRef} position={[-0.35, 0.7, 0]}>
-              <mesh position={[0, -0.3, 0]} castShadow><boxGeometry args={[0.18, 0.7, 0.18]} /><meshStandardMaterial color={getZombieSkin()} /></mesh>
+
+            <group ref={leftArmRef} position={[-0.4, 0.6, 0]}>
+              <mesh position={[0, -0.25, 0]} castShadow>
+                <cylinderGeometry args={[0.08, 0.06, 0.6]} />
+                <meshStandardMaterial color={skinColor} />
+              </mesh>
             </group>
-            <group ref={rightArmRef} position={[0.35, 0.7, 0]}>
-              <mesh position={[0, -0.3, 0]} castShadow><boxGeometry args={[0.18, 0.7, 0.18]} /><meshStandardMaterial color={getZombieSkin()} /></mesh>
+            <group ref={rightArmRef} position={[0.4, 0.6, 0]}>
+              <mesh position={[0, -0.25, 0]} castShadow>
+                <cylinderGeometry args={[0.08, 0.06, 0.6]} />
+                <meshStandardMaterial color={skinColor} />
+              </mesh>
             </group>
           </group>
-          <group ref={leftLegRef} position={[-0.15, -0.15, 0]}>
-            <mesh position={[0, -0.4, 0]} castShadow><boxGeometry args={[0.18, 0.8, 0.2]} /><meshStandardMaterial color="#212121" /></mesh>
+
+          {/* Legs */}
+          <group ref={leftLegRef} position={[-0.18, 0, 0]}>
+            <mesh position={[0, -0.35, 0]} castShadow>
+              <cylinderGeometry args={[0.11, 0.09, 0.75]} />
+              <meshStandardMaterial color="#212121" />
+            </mesh>
           </group>
-          <group ref={rightLegRef} position={[0.15, -0.15, 0]}>
-            <mesh position={[0, -0.4, 0]} castShadow><boxGeometry args={[0.18, 0.8, 0.2]} /><meshStandardMaterial color="#212121" /></mesh>
+          <group ref={rightLegRef} position={[0.18, 0, 0]}>
+            <mesh position={[0, -0.35, 0]} castShadow>
+              <cylinderGeometry args={[0.11, 0.09, 0.75]} />
+              <meshStandardMaterial color="#212121" />
+            </mesh>
           </group>
+
         </group>
       </group>
     </group>
