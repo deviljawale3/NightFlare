@@ -16,6 +16,9 @@ export enum TimeOfDay {
 export interface GameSettings {
   soundEnabled: boolean;
   vibrationEnabled: boolean;
+  cameraAngle: number; // 0-360 degrees
+  cameraDistance: number; // Zoom level 15-40
+  cameraPreset: 'DEFAULT' | 'CLOSE' | 'TOP_DOWN' | 'SIDE' | 'ISOMETRIC' | 'FREE' | 'CINEMATIC';
 }
 
 export enum NightEvent {
@@ -78,7 +81,16 @@ export enum WeaponType {
   BOW = 'BOW',     // Unlocked at 15000 score
 }
 
-export type EnemyClass = 'STALKER' | 'BRUTE' | 'WRAITH' | 'VOID_WALKER';
+export type EnemyClass =
+  | 'STALKER'
+  | 'BRUTE'
+  | 'WRAITH'
+  | 'VOID_WALKER'
+  // Location-specific enemies
+  | 'FOREST_WOLF'      // Forest: Fast pack hunter
+  | 'FIRE_ELEMENTAL'   // Volcano: Ranged fire attacks
+  | 'ICE_WRAITH';      // Arctic: Freezing attacks
+
 export type EnemyTarget = 'NIGHTFLARE' | 'PLAYER' | 'STRUCTURE';
 
 export interface EnemyType {

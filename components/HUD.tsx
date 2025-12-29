@@ -4,83 +4,28 @@ import { TimeOfDay, GameState } from '../types';
 import ChatPanel from './ChatPanel';
 import SocialShare from './SocialShare';
 import Minimap from './Minimap';
+import PremiumJoystick from './PremiumJoystick';
+import PremiumAttackButton from './PremiumAttackButton';
+import PremiumCameraButton from './PremiumCameraButton';
 
 interface HUDProps {
   onOpenInventory: () => void;
   onOpenCrafting: () => void;
 }
 
-// Isolated Joystick Component to prevent parent re-renders
-const Joystick: React.FC = React.memo(() => {
-  const [active, setActive] = useState(false);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const baseRef = useRef<HTMLDivElement>(null);
-  const rectRef = useRef<DOMRect | null>(null);
+// Premium Joystick handlers
+const handleJoystickMove = (x: number, y: number) => {
+  (window as any).joystickX = x;
+  (window as any).joystickY = y;
+};
 
-  const handleStart = (e: React.PointerEvent) => {
-    if (!baseRef.current) return;
-    rectRef.current = baseRef.current.getBoundingClientRect();
-    setActive(true);
-    (e.target as Element).setPointerCapture(e.pointerId);
-    handleMove(e.clientX, e.clientY);
-  };
-
-  const handleMove = (clientX: number, clientY: number) => {
-    if (!rectRef.current) return;
-
-    // Use cached rect
-    const width = rectRef.current.width;
-    const height = rectRef.current.height;
-    const centerX = rectRef.current.left + width / 2;
-    const centerY = rectRef.current.top + height / 2;
-
-    const dX = clientX - centerX;
-    const dY = clientY - centerY;
-    const dist = Math.sqrt(dX ** 2 + dY ** 2) || 0.001;
-
-    // Slightly larger max dist for smoother feel
-    const maxDist = window.innerWidth < 640 ? 50 : 70;
-
-    const scale = Math.min(dist, maxDist) / dist;
-    const limitedX = dX * scale;
-    const limitedY = dY * scale;
-
-    setPos({ x: limitedX, y: limitedY });
-
-    // Direct global update (bypassing React state for game loop)
-    (window as any).joystickX = limitedX / maxDist;
-    (window as any).joystickY = limitedY / maxDist;
-  };
-
-  const handleEnd = () => {
-    setActive(false);
-    setPos({ x: 0, y: 0 });
-    rectRef.current = null;
-    (window as any).joystickX = 0;
-    (window as any).joystickY = 0;
-  };
-
-  return (
-    <div className="flex flex-col items-center">
-      <div
-        ref={baseRef}
-        className="w-32 h-32 sm:w-44 sm:h-44 rounded-full border border-white/10 bg-black/40 pointer-events-auto touch-none flex items-center justify-center shadow-inner"
-        onPointerDown={handleStart}
-        onPointerMove={e => { if (active) handleMove(e.clientX, e.clientY); }}
-        onPointerUp={e => { (e.target as Element).releasePointerCapture(e.pointerId); handleEnd(); }}
-        onPointerCancel={handleEnd}
-      >
-        <div
-          className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-white/15 backdrop-blur-md border border-white/20 shadow-2xl pointer-events-none transition-transform duration-75"
-          style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
-        />
-      </div>
-    </div>
-  );
-});
+const handleJoystickEnd = () => {
+  (window as any).joystickX = 0;
+  (window as any).joystickY = 0;
+};
 
 const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
-  const { resources, playerStats, nightflareHealth, level, levelTimer, chatMessages, setGameState, triggerNova, isPlayerGrounded, wave, score, challengeState } = useGameStore(
+  const { notification, resources, playerStats, nightflareHealth, level, levelTimer, chatMessages, setGameState, triggerNova, isPlayerGrounded, wave, score, challengeState } = useGameStore(
     // Selector for perf optimization: only re-render on specific changes
     (state) => ({
       resources: state.resources,
@@ -95,6 +40,7 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
       wave: state.wave,
       score: state.score,
       challengeState: state.challengeState,
+      notification: state.notification,
     })
   );
 
@@ -138,7 +84,32 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
   };
 
   return (
-    <div className="w-full h-full flex flex-col justify-between p-3 sm:p-8 select-none pointer-events-none font-['Outfit'] overflow-hidden relative">
+    <div className="w-full h-full flex flex-col justify-between p-3 sm:p-8 select-none pointer-events-none font-['Outfit'] overflow-hidden relative safe-padding">
+
+      {/* GLOBAL NOTIFICATION BANNER */}
+      {notification && notification.visible && (
+        <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-none p-4">
+          <div className="flex flex-col items-center animate-in zoom-in fade-in slide-in-from-top-12 duration-1000 w-full max-w-4xl">
+            <div className={`
+              backdrop-blur-3xl px-8 sm:px-20 py-8 sm:py-12 text-center 
+              rounded-[2.5rem] sm:rounded-[4rem] border-4 
+              shadow-[0_0_100px_rgba(0,0,0,0.8)]
+              ${notification.type === 'night'
+                ? 'bg-red-950/90 border-red-500/50 shadow-red-900/40'
+                : 'bg-slate-900/90 border-blue-500/50 shadow-blue-900/40'}
+            `}>
+              <div className={`font-black tracking-[0.4em] sm:tracking-[0.8em] text-[10px] sm:text-sm uppercase mb-3 sm:mb-5 animate-pulse
+                ${notification.type === 'night' ? 'text-red-500' : 'text-blue-400'}
+              `}>
+                {notification.subtext || "ALERT"}
+              </div>
+              <h1 className="text-white text-4xl sm:text-7xl md:text-8xl font-black italic tracking-tighter uppercase drop-shadow-[0_10px_20px_rgba(0,0,0,1)] leading-none">
+                {notification.text}
+              </h1>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CHAT OVERLAY */}
       {showChat && (
@@ -183,24 +154,24 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
           </div>
         </div>
 
-        {/* TOP CENTER: TIMER & LEVEL OR CHALLENGE STATUS */}
+        {/* TOP CENTER: TIMER & LEVEL - ULTRA COMPACT & TRANSPARENT */}
         <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none top-0">
           {challengeState?.isActive ? (
-            // CHALLENGE MODE UI
-            <div className="bg-black/80 backdrop-blur-md px-6 sm:px-10 py-3 sm:py-4 rounded-[2rem] border border-red-500/30 text-center shadow-2xl min-w-[280px] sm:min-w-[400px]">
-              <div className="text-[8px] sm:text-[10px] font-black text-red-500 uppercase tracking-[0.3em] italic mb-2 whitespace-nowrap flex items-center justify-center gap-2">
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                SHADOW DUEL
+            // CHALLENGE MODE - MINIMAL
+            <div className="bg-black/20 backdrop-blur-sm px-3 sm:px-4 py-1 sm:py-1.5 rounded-xl border border-red-500/10 text-center shadow-sm min-w-[160px] sm:min-w-[220px]">
+              <div className="text-[6px] sm:text-[8px] font-black text-red-400/60 uppercase tracking-[0.15em] italic mb-0.5 whitespace-nowrap flex items-center justify-center gap-1">
+                <span className="w-1 h-1 bg-red-500 rounded-full animate-pulse" />
+                DUEL
               </div>
 
-              {/* Score Comparison */}
-              <div className="flex items-center justify-between gap-4 mb-2">
+              {/* Score Comparison - ULTRA COMPACT */}
+              <div className="flex items-center justify-between gap-1.5 sm:gap-2 mb-0.5">
                 <div className="flex flex-col items-center">
-                  <div className="text-white/50 text-[8px] uppercase font-bold mb-1">You</div>
-                  <div className="text-green-400 text-lg sm:text-2xl font-black tabular-nums">{score}</div>
+                  <div className="text-white/30 text-[6px] uppercase font-bold mb-0">You</div>
+                  <div className="text-green-400 text-xs sm:text-sm font-black tabular-nums">{score}</div>
                 </div>
 
-                <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden relative mx-4">
+                <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden relative mx-1.5">
                   <div
                     className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
                     style={{ width: `${Math.min(100, (score / (score + challengeState.opponent.score)) * 100)}%` }}
@@ -208,72 +179,132 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
                 </div>
 
                 <div className="flex flex-col items-center">
-                  <div className="text-white/50 text-[8px] uppercase font-bold mb-1">{challengeState.opponent.name}</div>
-                  <div className="text-red-400 text-lg sm:text-2xl font-black tabular-nums">{Math.floor(challengeState.opponent.score)}</div>
+                  <div className="text-white/30 text-[6px] uppercase font-bold mb-0">{challengeState.opponent.name}</div>
+                  <div className="text-red-400 text-xs sm:text-sm font-black tabular-nums">{Math.floor(challengeState.opponent.score)}</div>
                 </div>
               </div>
 
-              <div className="text-white/30 text-[9px] font-mono tabular-nums">{formatTime(levelTimer)} remaining</div>
+              <div className="text-white/20 text-[7px] font-mono tabular-nums">{formatTime(levelTimer)}</div>
             </div>
           ) : (
-            // NORMAL MODE UI
-            <div className="backdrop-blur-md px-4 sm:px-10 py-2 sm:py-3 rounded-[2rem] border text-center shadow-2xl" style={themeStyle}>
-              <div className="text-[8px] sm:text-[11px] font-black opacity-80 uppercase tracking-[0.3em] italic mb-0.5 sm:mb-1 whitespace-nowrap" style={{ color: `rgb(${theme.r},${theme.g},${theme.b})` }}>{theme.name} • WAVE {wave}</div>
-              <div className="text-xl sm:text-4xl font-black text-white tracking-tighter tabular-nums leading-none">
+            // NORMAL MODE - ULTRA COMPACT & TRANSPARENT
+            <div className="bg-black/15 backdrop-blur-sm px-2 sm:px-4 py-1 sm:py-1.5 rounded-xl border border-white/5 text-center shadow-sm">
+              <div className="text-[6px] sm:text-[8px] font-black opacity-40 uppercase tracking-[0.15em] italic mb-0 whitespace-nowrap" style={{ color: `rgba(${theme.r},${theme.g},${theme.b},0.6)` }}>{theme.name} • W{wave}</div>
+              <div className="text-base sm:text-xl font-black text-white/80 tracking-tighter tabular-nums leading-none">
                 {formatTime(levelTimer)}
               </div>
             </div>
           )}
         </div>
 
-        {/* TOP RIGHT: RESOURCES & PAUSE */}
-        <div className="flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto">
-          <div className="backdrop-blur-xl px-3 py-2 rounded-2xl border flex flex-wrap justify-end gap-x-4 gap-y-1 shadow-2xl max-w-[160px] sm:max-w-none" style={themeStyle}>
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm sm:text-2xl">🪵</span>
-              <span className="text-xs sm:text-lg font-black text-white">{resources.wood}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm sm:text-2xl">🪨</span>
-              <span className="text-xs sm:text-lg font-black text-white">{resources.stone}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm sm:text-2xl">🍎</span>
-              <span className="text-xs sm:text-lg font-black text-white">{resources.food}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm sm:text-2xl">✨</span>
-              <span className="text-xs sm:text-lg font-black text-white">{resources.lightShards}</span>
-            </div>
+        {/* TOP RIGHT: RESOURCES & PAUSE - PREMIUM */}
+        <div className="flex flex-col items-end gap-2 sm:gap-4 pointer-events-auto">
+          {/* RESOURCES PANEL - PREMIUM GLASS */}
+          <div className="
+            relative group
+            backdrop-blur-xl 
+            bg-black/30 
+            px-3 py-2 sm:px-4 sm:py-3
+            rounded-2xl 
+            border border-white/10 
+            flex flex-wrap justify-end gap-x-3 sm:gap-x-5 gap-y-1 
+            shadow-lg
+            transition-all duration-300
+            hover:bg-black/40 hover:border-white/20 hover:scale-[1.02]
+          ">
+            {[
+              { icon: '🪵', val: resources.wood, color: 'text-amber-400' },
+              { icon: '🪨', val: resources.stone, color: 'text-stone-300' },
+              { icon: '🍎', val: resources.food, color: 'text-red-400' },
+              { icon: '✨', val: resources.lightShards, color: 'text-cyan-300' }
+            ].map((res, i) => (
+              <div key={i} className="flex items-center gap-1.5 transition-transform hover:scale-110">
+                <span className="text-sm sm:text-2xl drop-shadow-md filter">{res.icon}</span>
+                <span className={`text-xs sm:text-lg font-black ${res.color} tabular-nums leading-none tracking-tight`}>
+                  {res.val}
+                </span>
+              </div>
+            ))}
           </div>
 
-          {/* MINIMAP */}
-          <div className="pointer-events-auto backdrop-blur-xl rounded-xl border border-white/10 shadow-2xl p-1 overflow-hidden">
+          {/* MINIMAP CONTAINER - PREMIUM */}
+          <div className="
+            pointer-events-auto 
+            backdrop-blur-xl 
+            rounded-2xl 
+            border border-white/10 
+            shadow-[0_8px_32px_rgba(0,0,0,0.3)] 
+            p-1 
+            overflow-hidden
+            bg-black/20
+            transition-transform hover:scale-105
+          ">
             <Minimap />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 sm:gap-3">
+            {/* SCREENSHOT BUTTON */}
             <button
               onClick={() => setShowShare(true)}
-              className="w-10 h-10 sm:w-16 sm:h-16 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-2xl pointer-events-auto"
+              className="
+                relative group
+                w-10 h-10 sm:w-14 sm:h-14
+                rounded-xl
+                bg-white/5 hover:bg-white/10
+                backdrop-blur-xl
+                border border-white/10
+                flex items-center justify-center
+                shadow-lg hover:shadow-[0_0_20px_rgba(255,255,255,0.2)]
+                transition-all duration-300
+                active:scale-95
+              "
             >
-              <span className="text-lg sm:text-2xl">📸</span>
+              <div className="absolute inset-0 rounded-xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <span className="text-lg sm:text-2xl drop-shadow-lg transform group-hover:rotate-12 transition-transform">📸</span>
             </button>
+
+            {/* CHAT BUTTON */}
             <button
               onClick={() => setShowChat(!showChat)}
-              className={`w-10 h-10 sm:w-16 sm:h-16 bg-blue-900/40 border border-blue-400/30 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-2xl pointer-events-auto ${showChat ? 'bg-blue-600' : ''}`}
+              className={`
+                relative group
+                w-10 h-10 sm:w-14 sm:h-14
+                rounded-xl
+                backdrop-blur-xl
+                border
+                flex items-center justify-center
+                shadow-lg
+                transition-all duration-300
+                active:scale-95
+                ${showChat
+                  ? 'bg-blue-600/60 border-blue-400 shadow-[0_0_20px_rgba(37,99,235,0.4)]'
+                  : 'bg-blue-900/40 border-blue-400/30 hover:shadow-[0_0_20px_rgba(37,99,235,0.2)]'
+                }
+              `}
             >
-              <span className="text-lg sm:text-2xl">💬</span>
-              {hasUnread && <div className="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_red]" />}
+              <span className="text-lg sm:text-2xl drop-shadow-lg transform group-hover:scale-110 transition-transform">💬</span>
+              {hasUnread && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_red] border border-white/20" />
+              )}
             </button>
+
+            {/* PAUSE BUTTON */}
             <button
-              onClick={() => {
-                // Force immediate state update
-                useGameStore.getState().setGameState(GameState.PAUSED);
-              }}
-              className="w-10 h-10 sm:w-16 sm:h-16 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-2xl pointer-events-auto"
+              onClick={() => useGameStore.getState().setGameState(GameState.PAUSED)}
+              className="
+                relative group
+                w-10 h-10 sm:w-14 sm:h-14
+                rounded-xl
+                bg-red-500/10 hover:bg-red-500/20
+                backdrop-blur-xl
+                border border-red-500/20
+                flex items-center justify-center
+                shadow-lg hover:shadow-[0_0_20px_rgba(239,68,68,0.3)]
+                transition-all duration-300
+                active:scale-95
+              "
             >
-              <span className="text-lg sm:text-2xl">⏸️</span>
+              <span className="text-lg sm:text-2xl drop-shadow-lg transform group-hover:scale-110 transition-transform">⏸️</span>
             </button>
           </div>
         </div>
@@ -286,43 +317,179 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
         </div>
       </div>
 
-      {/* BOTTOM SECTION: CONTROLS */}
+      {/* BOTTOM SECTION: PREMIUM CONTROLS */}
       <div className="flex justify-between items-end w-full pb-4 px-2">
 
-        {/* Joystick - Isolated */}
-        <Joystick />
+        {/* Premium Joystick */}
+        <PremiumJoystick onMove={handleJoystickMove} onEnd={handleJoystickEnd} />
 
         {/* Center Utilities */}
         <div className="flex flex-col items-center gap-6 pointer-events-auto">
           <button
             onClick={triggerNova}
-            className={`w-16 h-16 sm:w-24 sm:h-24 rounded-full flex flex-col items-center justify-center transition-all border-2 ${playerStats.novaCharge >= 100 ? 'bg-orange-600 border-white shadow-[0_0_35px_rgba(251,146,60,0.8)] animate-pulse' : 'bg-black/60 border-white/10 opacity-70'}`}>
-            <span className="text-3xl sm:text-5xl">🔥</span>
-            <span className="text-[8px] sm:text-[10px] font-black text-white mt-1 italic">{Math.floor(playerStats.novaCharge)}%</span>
+            className={`
+              relative group
+              w-16 h-16 sm:w-24 sm:h-24 
+              rounded-full 
+              flex flex-col items-center justify-center 
+              transition-all duration-300
+              border-2
+              backdrop-blur-xl
+              ${playerStats.novaCharge >= 100
+                ? 'bg-gradient-to-br from-orange-500/40 to-red-500/40 border-yellow-400/60 shadow-[0_0_50px_rgba(251,146,60,0.8)] hover:scale-110 active:scale-95 cursor-pointer'
+                : 'bg-black/40 border-white/10 opacity-50 cursor-not-allowed'
+              }
+            `}
+          >
+            {/* Animated glow ring when ready */}
+            {playerStats.novaCharge >= 100 && (
+              <>
+                <div className="absolute inset-0 rounded-full border-2 border-yellow-400 animate-ping opacity-40" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-orange-400 to-yellow-400 opacity-20 animate-pulse" />
+              </>
+            )}
+
+            {/* Icon and charge */}
+            <div className="relative z-10 flex flex-col items-center">
+              <span className="text-3xl sm:text-5xl drop-shadow-[0_0_10px_rgba(251,146,60,0.8)]">🔥</span>
+              <span className="text-[8px] sm:text-[10px] font-black text-white mt-1 italic drop-shadow-lg">
+                {Math.floor(playerStats.novaCharge)}%
+              </span>
+            </div>
+
+            {/* Charge progress ring */}
+            <svg className="absolute inset-0 w-full h-full -rotate-90">
+              <circle
+                cx="50%"
+                cy="50%"
+                r="45%"
+                fill="none"
+                stroke="rgba(255,255,255,0.1)"
+                strokeWidth="2"
+              />
+              <circle
+                cx="50%"
+                cy="50%"
+                r="45%"
+                fill="none"
+                stroke="url(#novaGradient)"
+                strokeWidth="3"
+                strokeDasharray={`${2 * Math.PI * 45} ${2 * Math.PI * 45}`}
+                strokeDashoffset={2 * Math.PI * 45 * (1 - playerStats.novaCharge / 100)}
+                className="transition-all duration-300"
+              />
+              <defs>
+                <linearGradient id="novaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#fb923c" />
+                  <stop offset="100%" stopColor="#fbbf24" />
+                </linearGradient>
+              </defs>
+            </svg>
           </button>
           <div className="flex gap-4">
-            <button onClick={onOpenInventory} className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-black/70 border border-white/10 flex items-center justify-center text-2xl active:scale-90 shadow-2xl">🎒</button>
-            <button onClick={onOpenCrafting} className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-orange-950/40 border border-orange-500/30 flex items-center justify-center text-2xl active:scale-90 shadow-2xl">🛠️</button>
+            {/* Premium Inventory Button */}
+            <button
+              onClick={onOpenInventory}
+              className="
+                relative group
+                w-12 h-12 sm:w-16 sm:h-16 
+                rounded-2xl 
+                bg-gradient-to-br from-purple-500/20 to-blue-500/20
+                backdrop-blur-xl
+                border border-purple-400/30 
+                flex items-center justify-center 
+                text-2xl 
+                shadow-lg hover:shadow-[0_0_30px_rgba(168,85,247,0.5)]
+                transition-all duration-300
+                hover:scale-110 active:scale-90
+              "
+            >
+              {/* Glow effect */}
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-400 to-blue-400 opacity-0 group-hover:opacity-20 transition-opacity" />
+
+              {/* Icon */}
+              <span className="relative z-10 drop-shadow-lg">🎒</span>
+
+              {/* Shimmer */}
+              <div className="absolute inset-0 rounded-2xl overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+              </div>
+            </button>
+
+            {/* Premium Crafting Button */}
+            <button
+              onClick={onOpenCrafting}
+              className="
+                relative group
+                w-12 h-12 sm:w-16 sm:h-16 
+                rounded-2xl 
+                bg-gradient-to-br from-orange-500/20 to-amber-500/20
+                backdrop-blur-xl
+                border border-orange-400/30 
+                flex items-center justify-center 
+                text-2xl 
+                shadow-lg hover:shadow-[0_0_30px_rgba(251,146,60,0.5)]
+                transition-all duration-300
+                hover:scale-110 active:scale-90
+              "
+            >
+              {/* Glow effect */}
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-400 opacity-0 group-hover:opacity-20 transition-opacity" />
+
+              {/* Icon */}
+              <span className="relative z-10 drop-shadow-lg">🛠️</span>
+
+              {/* Shimmer */}
+              <div className="absolute inset-0 rounded-2xl overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+              </div>
+            </button>
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Premium Action Buttons */}
         <div className="flex flex-col items-end gap-6 sm:gap-14 pointer-events-auto">
           <button
             onPointerDown={() => isPlayerGrounded && window.dispatchEvent(new Event('player-jump'))}
-            className={`w-14 h-14 sm:w-20 sm:h-20 bg-cyan-900/40 border border-cyan-400/50 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 ${!isPlayerGrounded ? 'opacity-30' : 'opacity-100'}`}
+            className={`
+              relative group
+              w-14 h-14 sm:w-20 sm:h-20 
+              rounded-full 
+              bg-gradient-to-br from-cyan-500/30 to-blue-500/30
+              backdrop-blur-xl
+              border border-cyan-400/40 
+              flex items-center justify-center 
+              shadow-lg hover:shadow-[0_0_30px_rgba(34,211,238,0.6)]
+              transition-all duration-300
+              ${!isPlayerGrounded ? 'opacity-30 cursor-not-allowed' : 'hover:scale-110 active:scale-90 cursor-pointer'}
+            `}
           >
-            <span className="text-3xl sm:text-5xl text-cyan-300">🌀</span>
+            {/* Glow effect */}
+            {isPlayerGrounded && (
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-cyan-400 to-blue-400 opacity-0 group-hover:opacity-20 transition-opacity" />
+            )}
+
+            {/* Icon */}
+            <span className="relative z-10 text-3xl sm:text-5xl text-cyan-300 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">🌀</span>
+
+            {/* Shimmer */}
+            {isPlayerGrounded && (
+              <div className="absolute inset-0 rounded-full overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+              </div>
+            )}
           </button>
 
-          <button
-            onPointerDown={() => window.dispatchEvent(new Event('player-attack'))}
-            className="w-28 h-28 sm:w-44 sm:h-44 bg-red-600 border-b-[8px] sm:border-b-[12px] border-red-900 rounded-[2rem] sm:rounded-[3rem] flex items-center justify-center active:translate-y-2 active:border-b-0 transition-all shadow-2xl"
-          >
-            <span className="text-5xl sm:text-8xl">⚔️</span>
-          </button>
+          {/* Premium Attack Button */}
+          <PremiumAttackButton onAttack={() => window.dispatchEvent(new Event('player-attack'))} />
         </div>
       </div>
+
+      {/* Premium Camera Button */}
+      <PremiumCameraButton onToggle={() => {
+        // Toggle camera mode - you can implement camera switching logic here
+        console.log('Camera toggle');
+      }} />
 
       {showShare && <SocialShare onClose={() => setShowShare(false)} stats={{ wave, score }} />}
     </div>

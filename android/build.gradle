@@ -1,29 +1,41 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
+// Top-level build file for NightFlare
+// Stable, Java 17 compatible, Capacitor-safe
 
 buildscript {
-    
+
+    ext {
+        kotlin_version = "1.8.22"
+    }
+
     repositories {
         google()
         mavenCentral()
     }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.7.2'
-        classpath 'com.google.gms:google-services:4.4.2'
 
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
+    dependencies {
+        // 🔒 DOWNGRADED TO JAVA-17 SAFE AGP
+        classpath "com.android.tools.build:gradle:8.2.2"
+        classpath "com.google.gms:google-services:4.4.2"
     }
 }
 
+// Shared SDK versions (used by app/build.gradle)
 apply from: "variables.gradle"
 
 allprojects {
-    repositories {
-        google()
-        mavenCentral()
+
+    // ⚠️ DO NOT declare repositories here
+    // Capacitor requires project repos (flatDir) in app module
+
+    configurations.all {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-stdlib:1.8.22"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22"
+        }
     }
 }
 
-task clean(type: Delete) {
+tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }

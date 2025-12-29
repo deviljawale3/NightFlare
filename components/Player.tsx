@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { GameState, IslandTheme } from '../types';
+import { soundEffects } from '../utils/soundEffects';
 
 const TrailVFX: React.FC<{ target: React.MutableRefObject<THREE.Group | null> }> = ({ target }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -76,12 +77,23 @@ const Player: React.FC = () => {
   const attackTimer = useRef(0);
   const comboTimeout = useRef<any>(null);
   const keys = useRef<{ [key: string]: boolean }>({});
+  const footstepTimer = useRef(0);
+  const lastFootstepTime = useRef(0);
 
   // Attack Handler with Lunge and Combo
   const handleAttack = () => {
     if (!isAttacking && !isDead) {
       setIsAttacking(true);
       attackTimer.current = 0;
+
+      // Play attack swing sound based on weapon
+      if (playerStats.currentWeapon === 'STAFF') {
+        soundEffects.attackSwingStaff();
+      } else if (playerStats.currentWeapon === 'SWORD') {
+        soundEffects.attackSwingSword();
+      } else if (playerStats.currentWeapon === 'BOW') {
+        soundEffects.attackSwingBow();
+      }
 
       const shakeIntensity = 0.6 + combo * 0.3;
       triggerScreenShake(shakeIntensity);
@@ -218,6 +230,20 @@ const Player: React.FC = () => {
 
           // Add subtle hip sway for realism
           groupRef.current.position.y = Math.abs(Math.sin(t * 2)) * 0.05;
+
+          // Footstep sounds - play when foot hits ground
+          const footstepInterval = 0.4 / (speed + 0.5); // Faster steps when moving faster
+          if (state.clock.getElapsedTime() - lastFootstepTime.current > footstepInterval) {
+            // Determine terrain type based on island theme
+            if (islandTheme === IslandTheme.FOREST) {
+              soundEffects.footstepGrass();
+            } else if (islandTheme === IslandTheme.VOLCANO) {
+              soundEffects.footstepStone();
+            } else {
+              soundEffects.footstepStone(); // Arctic/default
+            }
+            lastFootstepTime.current = state.clock.getElapsedTime();
+          }
         } else {
           // Smooth return to idle pose
           const idleFactor = 1 - Math.exp(-9 * delta);
@@ -242,6 +268,7 @@ const Player: React.FC = () => {
         setPlayerGrounded(true);
 
         // Landing impact effect
+        soundEffects.playerLand();
         triggerScreenShake(0.3);
       }
     }
@@ -263,6 +290,7 @@ const Player: React.FC = () => {
 
     const handleJump = () => {
       if (isGrounded) {
+        soundEffects.playerJump();
         setVerticalVelocity(0.42);
         setIsGrounded(false);
         setPlayerGrounded(false);
@@ -271,6 +299,7 @@ const Player: React.FC = () => {
     };
 
     const handleDamaged = () => {
+      soundEffects.playerDamage();
       setIsDamaged(true);
       setTimeout(() => setIsDamaged(false), 120);
       setCombo(0);

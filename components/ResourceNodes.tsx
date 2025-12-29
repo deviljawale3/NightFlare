@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useGameStore } from '../store';
 import { ResourceNode, GameState, TimeOfDay } from '../types';
+import { soundEffects } from '../utils/soundEffects';
 
 const ResourceNodes: React.FC = () => {
   const { addResource, wave, level, gameState, nodes, setNodes, removeNode, timeOfDay, settings } = useGameStore();
@@ -97,6 +98,22 @@ const ResourceNodes: React.FC = () => {
       CRYSTAL: 'lightShards',
       FOOD: 'food'
     };
+
+    // Play gathering sound based on resource type
+    switch (type) {
+      case 'TREE':
+        soundEffects.gatherWood();
+        break;
+      case 'ROCK':
+        soundEffects.gatherStone();
+        break;
+      case 'CRYSTAL':
+        soundEffects.gatherShard();
+        break;
+      case 'FOOD':
+        soundEffects.gatherFood();
+        break;
+    }
 
     addResource(resourceMap[type], yieldAmount, pos);
     removeNode(id);

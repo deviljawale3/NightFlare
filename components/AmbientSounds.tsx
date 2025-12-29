@@ -48,23 +48,53 @@ const AmbientSounds: React.FC = () => {
     if (!bgmRef.current) {
       bgmRef.current = ctx.createGain();
       bgmRef.current.connect(ctx.destination);
-      bgmRef.current.gain.setValueAtTime(0.08, ctx.currentTime);
+      bgmRef.current.gain.setValueAtTime(0.12, ctx.currentTime); // Slightly louder for presence
 
-      const createSynth = (freq: number, type: OscillatorType) => {
+      // RICH ATMOSPHERIC SOUNDTRACK SYSTEM
+      const createLayeredSynth = (freq: number, type: OscillatorType, detune: number = 0) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
         osc.type = type;
         osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        osc.detune.setValueAtTime(detune, ctx.currentTime);
         osc.connect(g);
         g.connect(bgmRef.current!);
         osc.start();
-        return osc;
+        return { osc, gain: g };
       };
 
-      bgmOscRef.current = [
-        createSynth(440, 'sine'),   // Ethereal Mid
-        createSynth(110, 'triangle') // Deep Bass
+      // Create rich layered soundtrack
+      const layers = [
+        // Deep sub-bass drone (foundation)
+        createLayeredSynth(55, 'sine', 0),           // A1 - Deep rumble
+        createLayeredSynth(55, 'sine', 5),           // Slightly detuned for width
+
+        // Mid-bass pad (atmosphere)
+        createLayeredSynth(110, 'triangle', 0),      // A2 - Warm pad
+        createLayeredSynth(165, 'triangle', -8),     // E3 - Fifth harmony
+
+        // Ethereal high layer (mystery)
+        createLayeredSynth(440, 'sine', 0),          // A4 - Clear tone
+        createLayeredSynth(659.25, 'sine', 12),      // E5 - Ethereal high
+
+        // Tension layer (subtle dissonance)
+        createLayeredSynth(466.16, 'sine', -15),     // A#4 - Tension note
+
+        // Shimmer layer (magic/mystery)
+        createLayeredSynth(1318.51, 'sine', 20),     // E6 - Shimmer
       ];
+
+      // Set individual layer volumes for balance
+      layers[0].gain.gain.setValueAtTime(0.15, ctx.currentTime);  // Sub-bass
+      layers[1].gain.gain.setValueAtTime(0.12, ctx.currentTime);  // Sub-bass detune
+      layers[2].gain.gain.setValueAtTime(0.10, ctx.currentTime);  // Mid pad
+      layers[3].gain.gain.setValueAtTime(0.08, ctx.currentTime);  // Fifth
+      layers[4].gain.gain.setValueAtTime(0.06, ctx.currentTime);  // Ethereal
+      layers[5].gain.gain.setValueAtTime(0.05, ctx.currentTime);  // High ethereal
+      layers[6].gain.gain.setValueAtTime(0.03, ctx.currentTime);  // Tension
+      layers[7].gain.gain.setValueAtTime(0.04, ctx.currentTime);  // Shimmer
+
+      bgmOscRef.current = layers.map(l => l.osc);
     } else {
       // Double check connections
       try {
@@ -72,10 +102,43 @@ const AmbientSounds: React.FC = () => {
       } catch (e) { }
     }
 
+    // Dynamic music based on day/night with smooth transitions
     const isNight = timeOfDay === TimeOfDay.NIGHT;
+
+    // Adjust all layers for day/night atmosphere
     bgmOscRef.current.forEach((osc, idx) => {
-      const baseFreq = idx === 0 ? (isNight ? 280 : 440) : (isNight ? 70 : 110);
-      osc.frequency.exponentialRampToValueAtTime(baseFreq, ctx.currentTime + 5);
+      let targetFreq = 0;
+
+      if (isNight) {
+        // NIGHT: Lower, darker, more ominous
+        const nightFreqs = [
+          41.20,    // E1 - Deeper sub-bass
+          41.20,    // E1 detuned
+          82.41,    // E2 - Dark pad
+          123.47,   // B2 - Minor third (darker)
+          329.63,   // E4 - Lower ethereal
+          493.88,   // B4 - Darker high
+          369.99,   // F#4 - More tension
+          987.77    // B5 - Dark shimmer
+        ];
+        targetFreq = nightFreqs[idx];
+      } else {
+        // DAY: Brighter, hopeful, more energetic
+        const dayFreqs = [
+          55.00,    // A1 - Warm sub-bass
+          55.00,    // A1 detuned
+          110.00,   // A2 - Bright pad
+          165.00,   // E3 - Perfect fifth (hopeful)
+          440.00,   // A4 - Clear ethereal
+          659.25,   // E5 - Bright high
+          466.16,   // A#4 - Subtle tension
+          1318.51   // E6 - Bright shimmer
+        ];
+        targetFreq = dayFreqs[idx];
+      }
+
+      // Smooth frequency transition (10 seconds)
+      osc.frequency.exponentialRampToValueAtTime(targetFreq, ctx.currentTime + 10);
     });
 
     const bufferSize = 2 * ctx.sampleRate;

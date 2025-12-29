@@ -35,6 +35,10 @@ interface GameStore {
   currentNightEvent: NightEvent;
 
   setGameState: (state: GameState) => void;
+
+  // UI Notifications
+  notification: { visible: boolean; text: string; subtext?: string; type: 'night' | 'wave' | 'unlock' } | null;
+  showNotification: (text: string, subtext?: string, type?: 'night' | 'wave' | 'unlock') => void;
   setTimeOfDay: (time: TimeOfDay) => void;
   setNodes: (nodes: import('./types').ResourceNode[]) => void;
   addStructure: (type: 'WALL' | 'PYLON', pos: [number, number, number]) => void;
@@ -126,8 +130,24 @@ const SETTINGS_KEY = 'nightflare_settings';
 
 const loadSettings = (): GameSettings => {
   const stored = localStorage.getItem(SETTINGS_KEY);
-  if (stored) return JSON.parse(stored);
-  return { soundEnabled: true, vibrationEnabled: true };
+  if (stored) {
+    const parsed = JSON.parse(stored);
+    // Ensure all fields exist (for backward compatibility)
+    return {
+      soundEnabled: parsed.soundEnabled ?? true,
+      vibrationEnabled: parsed.vibrationEnabled ?? true,
+      cameraAngle: parsed.cameraAngle ?? 45,
+      cameraDistance: parsed.cameraDistance ?? 25,
+      cameraPreset: parsed.cameraPreset ?? 'DEFAULT'
+    };
+  }
+  return {
+    soundEnabled: true,
+    vibrationEnabled: true,
+    cameraAngle: 45,
+    cameraDistance: 25,
+    cameraPreset: 'DEFAULT'
+  };
 };
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -167,6 +187,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   islandTheme: IslandTheme.FOREST,
   currentNightEvent: NightEvent.NONE,
   chatMessages: [],
+  notification: null,
+
+  showNotification: (text, subtext, type = 'night') => {
+    set({ notification: { visible: true, text, subtext, type } });
+    setTimeout(() => {
+      set(state => (state.notification?.text === text ? { notification: null } : {}));
+    }, 4000); // Auto-hide after 4s
+  },
 
   lives: Number(localStorage.getItem('nightflare_lives')) || 3,
   lastLifeRegen: Number(localStorage.getItem('nightflare_life_regen')) || Date.now(),
@@ -531,13 +559,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
-  nextWave: () => set((state) => {
-    const nextW = state.wave + 1;
-    return {
-      wave: nextW,
-      score: state.score + 2500
-    };
-  }),
+  nextWave: () => {
+    // Play wave transition sound
+    import('./utils/soundEffects').then(({ soundEffects }) => {
+      soundEffects.waveTransition();
+    });
+
+    return set((state) => {
+      const nextW = state.wave + 1;
+      return {
+        wave: nextW,
+        score: state.score + 2500
+      };
+    });
+  },
 
   decrementTimer: () => set((state) => {
     if (state.levelTimer <= 0) return {};
@@ -548,27 +583,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return { levelTimer: nextTimer };
   }),
 
-  nextLevel: () => set((state) => {
-    const nextL = state.level + 1;
-    const themes = [IslandTheme.FOREST, IslandTheme.VOLCANO, IslandTheme.ARCTIC];
-    return {
-      level: nextL,
-      levelTimer: 300,
-      islandTheme: themes[(nextL - 1) % themes.length],
-      gameState: GameState.PLAYING,
-      nodes: [],
-      structures: [],
-      nightflareHealth: 100,
-      score: state.score + 10000 // Big level clear bonus
-    };
-  }),
+  nextLevel: () => {
+    // Play location change sound
+    import('./utils/soundEffects').then(({ soundEffects }) => {
+      soundEffects.locationChange();
+    });
+
+    return set((state) => {
+      const nextL = state.level + 1;
+      const themes = [IslandTheme.FOREST, IslandTheme.VOLCANO, IslandTheme.ARCTIC];
+      return {
+        level: nextL,
+        levelTimer: 300,
+        islandTheme: themes[(nextL - 1) % themes.length],
+        gameState: GameState.PLAYING,
+        nodes: [],
+        structures: [],
+        nightflareHealth: 100,
+        score: state.score + 10000 // Big level clear bonus
+      };
+    });
+  },
 
   recordEnemyKill: (type: EnemyClass) => set((state) => {
     const pointsMap: Record<EnemyClass, number> = {
       STALKER: 150,
       BRUTE: 800,
       WRAITH: 300,
-      VOID_WALKER: 5000
+      VOID_WALKER: 5000,
+      // Location-specific enemies
+      FOREST_WOLF: 200,      // Fast, pack hunter
+      FIRE_ELEMENTAL: 350,   // Ranged attacks
+      ICE_WRAITH: 400        // Freezing attacks
     };
     return {
       kills: state.kills + 1,

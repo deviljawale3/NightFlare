@@ -23,8 +23,12 @@ interface SettingsState {
     hapticFeedback: boolean;
     sensitivity: number;
     autoAim: boolean;
+    autoAim: boolean;
     controlLayout: 'A' | 'B' | 'C';
     movementMode: 'joystick' | 'touch';
+    cameraPreset: 'DEFAULT' | 'CLOSE' | 'TOP_DOWN' | 'SIDE' | 'ISOMETRIC' | 'FREE' | 'CINEMATIC';
+    cameraAngle: number;
+    cameraDistance: number;
 
     // Accessibility
     colorblindMode: 'none' | 'protanopia' | 'deuteranopia' | 'tritanopia';
@@ -55,6 +59,9 @@ interface SettingsState {
     setAutoAim: (enabled: boolean) => void;
     setControlLayout: (layout: SettingsState['controlLayout']) => void;
     setMovementMode: (mode: SettingsState['movementMode']) => void;
+    setCameraPreset: (preset: SettingsState['cameraPreset']) => void;
+    setCameraAngle: (angle: number) => void;
+    setCameraDistance: (distance: number) => void;
     setColorblindMode: (mode: SettingsState['colorblindMode']) => void;
     setReducedMotion: (enabled: boolean) => void;
     setTextSize: (size: SettingsState['textSize']) => void;
@@ -85,6 +92,9 @@ const defaultSettings = {
     autoAim: false,
     controlLayout: 'A' as const,
     movementMode: 'joystick' as const,
+    cameraPreset: 'DEFAULT' as const,
+    cameraAngle: 45,
+    cameraDistance: 25,
     colorblindMode: 'none' as const,
     reducedMotion: false,
     textSize: 'medium' as const,
@@ -122,6 +132,9 @@ export const useSettingsStore = create<SettingsState>()(
             setAutoAim: (enabled) => set({ autoAim: enabled }),
             setControlLayout: (layout) => set({ controlLayout: layout }),
             setMovementMode: (mode) => set({ movementMode: mode }),
+            setCameraPreset: (preset) => set({ cameraPreset: preset }),
+            setCameraAngle: (angle) => set({ cameraAngle: angle }),
+            setCameraDistance: (distance) => set({ cameraDistance: distance }),
 
             setColorblindMode: (mode) => set({ colorblindMode: mode }),
             setReducedMotion: (enabled) => set({ reducedMotion: enabled }),
@@ -335,6 +348,19 @@ const SettingsPanel: React.FC = () => {
                                 label="Auto-Aim Assist"
                                 value={settings.autoAim}
                                 onChange={settings.setAutoAim}
+                            />
+
+                            <SettingSelect
+                                label="Camera Mode"
+                                value={settings.cameraPreset}
+                                options={[
+                                    { value: 'DEFAULT', label: 'Balanced (Standard)' },
+                                    { value: 'CLOSE', label: 'Close Action (New)' },
+                                    { value: 'CINEMATIC', label: 'Cinematic (Wide)' },
+                                    { value: 'TOP_DOWN', label: 'Top Down (Tactical)' },
+                                    { value: 'ISOMETRIC', label: 'Isometric (Classic)' }
+                                ]}
+                                onChange={(value) => settings.setCameraPreset(value as any)}
                             />
 
                             <SettingSelect

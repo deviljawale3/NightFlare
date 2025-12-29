@@ -140,14 +140,26 @@ const Minimap: React.FC = () => {
 
     return (
         <div className="relative group">
-            <canvas
-                ref={canvasRef}
-                width={120}
-                height={120}
-                className="rounded-xl border-2 border-cyan-400/30 bg-black/60 backdrop-blur-md shadow-[0_0_20px_rgba(6,182,212,0.2)]"
-            />
-            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[8px] text-cyan-400/60 font-black uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                RADAR
+            {/* Glassmorphism Container with Glow */}
+            <div className="relative rounded-2xl bg-black/20 backdrop-blur-xl border-2 border-cyan-400/40 shadow-[0_8px_32px_rgba(6,182,212,0.3)] p-2 transition-all duration-300 hover:border-cyan-400/60 hover:shadow-[0_8px_40px_rgba(6,182,212,0.4)]">
+                {/* Animated Glow Ring */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 blur-xl opacity-50 group-hover:opacity-75 transition-opacity" />
+
+                {/* Canvas */}
+                <canvas
+                    ref={canvasRef}
+                    width={120}
+                    height={120}
+                    className="rounded-xl relative z-10"
+                />
+
+                {/* Corner Accent */}
+                <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.8)] animate-pulse" />
+            </div>
+
+            {/* Label */}
+            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[8px] text-cyan-400/60 font-black uppercase tracking-[0.2em] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:text-cyan-400">
+                ◈ RADAR ◈
             </div>
         </div>
     );

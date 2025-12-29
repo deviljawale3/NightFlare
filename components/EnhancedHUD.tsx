@@ -1,6 +1,7 @@
 import React from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
+import { IslandTheme } from '../types';
 
 const EnhancedHUD: React.FC = () => {
     const {
@@ -11,8 +12,61 @@ const EnhancedHUD: React.FC = () => {
         level,
         levelTimer,
         challengeState,
-        arenaStats
+        arenaStats,
+        kills,
+        islandTheme,
+        getNightName
     } = useGameStore();
+
+    // Location-themed color schemes
+    const themeColors = {
+        [IslandTheme.FOREST]: {
+            primary: 'from-green-900/90 to-emerald-800/70',
+            accent: 'border-green-500/30',
+            glow: 'shadow-[0_8px_32px_rgba(34,197,94,0.3)]',
+            text: 'text-green-400',
+            badge: 'bg-green-500/20 border-green-500/40'
+        },
+        [IslandTheme.VOLCANO]: {
+            primary: 'from-red-900/90 to-orange-800/70',
+            accent: 'border-red-500/30',
+            glow: 'shadow-[0_8px_32px_rgba(239,68,68,0.3)]',
+            text: 'text-red-400',
+            badge: 'bg-red-500/20 border-red-500/40'
+        },
+        [IslandTheme.ARCTIC]: {
+            primary: 'from-blue-900/90 to-cyan-800/70',
+            accent: 'border-cyan-500/30',
+            glow: 'shadow-[0_8px_32px_rgba(6,182,212,0.3)]',
+            text: 'text-cyan-400',
+            badge: 'bg-cyan-500/20 border-cyan-500/40'
+        }
+    };
+
+    const currentTheme = themeColors[islandTheme];
+    const locationName = islandTheme === IslandTheme.FOREST ? '🌲 Forest Realm' :
+        islandTheme === IslandTheme.VOLCANO ? '🌋 Volcanic Wastes' :
+            '❄️ Arctic Tundra';
+
+    // Rank tier configuration
+    const getRankConfig = (rank: string) => {
+        switch (rank) {
+            case 'LEGEND':
+                return { color: 'bg-gradient-to-br from-yellow-400 to-amber-500', icon: '👑', glow: 'shadow-[0_0_20px_rgba(251,191,36,0.8)]' };
+            case 'DIAMOND':
+                return { color: 'bg-gradient-to-br from-cyan-400 to-blue-500', icon: '💎', glow: 'shadow-[0_0_15px_rgba(34,211,238,0.6)]' };
+            case 'PLATINUM':
+                return { color: 'bg-gradient-to-br from-slate-300 to-slate-400', icon: '⭐', glow: 'shadow-[0_0_12px_rgba(203,213,225,0.5)]' };
+            case 'GOLD':
+                return { color: 'bg-gradient-to-br from-yellow-600 to-yellow-700', icon: '🥇', glow: 'shadow-[0_0_10px_rgba(202,138,4,0.4)]' };
+            case 'SILVER':
+                return { color: 'bg-gradient-to-br from-slate-400 to-slate-500', icon: '🥈', glow: 'shadow-[0_0_8px_rgba(148,163,184,0.3)]' };
+            default:
+                return { color: 'bg-gradient-to-br from-orange-700 to-orange-800', icon: '🥉', glow: '' };
+        }
+    };
+
+    const rankConfig = getRankConfig(arenaStats.rank);
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -24,21 +78,24 @@ const EnhancedHUD: React.FC = () => {
         <div className="fixed inset-0 pointer-events-none z-50 safe-padding">
             {/* Top Left: Resources - Sleek Cards - MOBILE OPTIMIZED */}
             <div className="absolute top-2 sm:top-4 left-2 sm:left-4">
-                <div className="bg-gradient-to-br from-black/90 to-black/70 backdrop-blur-2xl rounded-xl sm:rounded-2xl p-2 sm:p-4 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.8)] pointer-events-auto">
-                    <div className="grid grid-cols-2 gap-1.5 sm:gap-3">
-                        <div className="flex items-center gap-1 sm:gap-2 bg-white/5 rounded-lg px-2 sm:px-3 py-1 sm:py-2">
+                <div className="bg-black/20 backdrop-blur-xl rounded-xl sm:rounded-2xl p-2 sm:p-4 border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.4)] pointer-events-auto transition-all duration-300 hover:border-white/30 hover:shadow-[0_8px_40px_rgba(0,0,0,0.5)]">
+                    {/* Subtle glow effect */}
+                    <div className="absolute inset-0 rounded-xl sm:rounded-2xl bg-gradient-to-br from-white/5 to-transparent blur-xl opacity-50" />
+
+                    <div className="grid grid-cols-2 gap-1.5 sm:gap-3 relative z-10">
+                        <div className="flex items-center gap-1 sm:gap-2 bg-white/10 backdrop-blur-md rounded-lg px-2 sm:px-3 py-1 sm:py-2 border border-white/10 transition-all hover:bg-white/15">
                             <span className="text-base sm:text-2xl drop-shadow-lg">🪵</span>
                             <span className="text-white font-mono font-bold text-xs sm:text-lg">{resources.wood}</span>
                         </div>
-                        <div className="flex items-center gap-1 sm:gap-2 bg-white/5 rounded-lg px-2 sm:px-3 py-1 sm:py-2">
+                        <div className="flex items-center gap-1 sm:gap-2 bg-white/10 backdrop-blur-md rounded-lg px-2 sm:px-3 py-1 sm:py-2 border border-white/10 transition-all hover:bg-white/15">
                             <span className="text-base sm:text-2xl drop-shadow-lg">🪨</span>
                             <span className="text-white font-mono font-bold text-xs sm:text-lg">{resources.stone}</span>
                         </div>
-                        <div className="flex items-center gap-1 sm:gap-2 bg-yellow-500/10 rounded-lg px-2 sm:px-3 py-1 sm:py-2 border border-yellow-500/20">
+                        <div className="flex items-center gap-1 sm:gap-2 bg-yellow-500/15 backdrop-blur-md rounded-lg px-2 sm:px-3 py-1 sm:py-2 border border-yellow-500/30 transition-all hover:bg-yellow-500/20 hover:shadow-[0_0_15px_rgba(234,179,8,0.3)]">
                             <span className="text-base sm:text-2xl drop-shadow-lg">✨</span>
                             <span className="text-yellow-400 font-mono font-bold text-xs sm:text-lg">{resources.lightShards}</span>
                         </div>
-                        <div className="flex items-center gap-1 sm:gap-2 bg-white/5 rounded-lg px-2 sm:px-3 py-1 sm:py-2">
+                        <div className="flex items-center gap-1 sm:gap-2 bg-white/10 backdrop-blur-md rounded-lg px-2 sm:px-3 py-1 sm:py-2 border border-white/10 transition-all hover:bg-white/15">
                             <span className="text-base sm:text-2xl drop-shadow-lg">🍖</span>
                             <span className="text-white font-mono font-bold text-xs sm:text-lg">{resources.food}</span>
                         </div>
@@ -46,14 +103,20 @@ const EnhancedHUD: React.FC = () => {
                 </div>
             </div>
 
-            {/* Top Right: Stats & Rank - MOBILE OPTIMIZED */}
+            {/* Top Right: Stats, Rank & Kills - MOBILE OPTIMIZED */}
             <div className="absolute top-2 sm:top-4 right-2 sm:right-4">
-                <div className="bg-gradient-to-br from-black/90 to-black/70 backdrop-blur-2xl rounded-xl sm:rounded-2xl p-2 sm:p-4 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.8)] pointer-events-auto">
+                <div className={`bg-gradient-to-br ${currentTheme.primary} backdrop-blur-2xl rounded-xl sm:rounded-2xl p-2 sm:p-4 border ${currentTheme.accent} ${currentTheme.glow} pointer-events-auto transition-all duration-500`}>
                     <div className="flex flex-col gap-1.5 sm:gap-3">
-                        {/* Wave */}
-                        <div className="flex items-center justify-between gap-2 sm:gap-4 bg-orange-500/10 rounded-lg px-2 sm:px-3 py-1 sm:py-2 border border-orange-500/20">
-                            <span className="text-white/60 text-[9px] sm:text-xs uppercase font-bold tracking-wider">Wave</span>
-                            <span className="text-orange-400 font-black text-lg sm:text-2xl">{wave}</span>
+                        {/* Location + Wave */}
+                        <div className={`flex items-center justify-between gap-2 sm:gap-4 ${currentTheme.badge} rounded-lg px-2 sm:px-3 py-1 sm:py-2 border`}>
+                            <span className="text-white/60 text-[9px] sm:text-xs uppercase font-bold tracking-wider">{locationName}</span>
+                            <span className={`${currentTheme.text} font-black text-lg sm:text-2xl`}>{getNightName(wave)}</span>
+                        </div>
+
+                        {/* Kill Counter */}
+                        <div className="flex items-center justify-between gap-2 sm:gap-4 bg-red-500/10 rounded-lg px-2 sm:px-3 py-1 sm:py-2 border border-red-500/20">
+                            <span className="text-white/60 text-[9px] sm:text-xs uppercase font-bold tracking-wider">💀 Kills</span>
+                            <span className="text-red-400 font-black text-lg sm:text-2xl tabular-nums">{kills}</span>
                         </div>
 
                         {/* Score */}
@@ -62,18 +125,17 @@ const EnhancedHUD: React.FC = () => {
                             <span className="text-cyan-400 font-mono font-bold text-xs sm:text-lg">{score.toLocaleString()}</span>
                         </div>
 
-                        {/* Rank Badge */}
-                        <div className="flex items-center gap-1.5 sm:gap-2 bg-purple-500/10 rounded-lg px-2 sm:px-3 py-1 sm:py-2 border border-purple-500/20">
-                            <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-black ${arenaStats.rank === 'LEGEND' ? 'bg-yellow-500 text-black' :
-                                arenaStats.rank === 'DIAMOND' ? 'bg-cyan-400 text-black' :
-                                    arenaStats.rank === 'PLATINUM' ? 'bg-slate-300 text-black' :
-                                        arenaStats.rank === 'GOLD' ? 'bg-yellow-600 text-black' :
-                                            arenaStats.rank === 'SILVER' ? 'bg-slate-400 text-black' :
-                                                'bg-orange-700 text-white'
-                                }`}>
-                                {arenaStats.rank[0]}
+                        {/* Enhanced Rank Badge */}
+                        <div className={`flex items-center gap-1.5 sm:gap-2 ${currentTheme.badge} rounded-lg px-2 sm:px-3 py-1 sm:py-2 border relative overflow-hidden`}>
+                            <div className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-lg sm:text-2xl ${rankConfig.color} ${rankConfig.glow} animate-pulse`}>
+                                {rankConfig.icon}
                             </div>
-                            <span className="text-white font-bold text-[10px] sm:text-sm">{arenaStats.rank}</span>
+                            <div className="flex flex-col">
+                                <span className="text-white font-black text-[10px] sm:text-sm uppercase">{arenaStats.rank}</span>
+                                <span className="text-white/50 text-[8px] sm:text-[10px] font-mono">{arenaStats.rankPoints} pts</span>
+                            </div>
+                            {/* Animated background shimmer */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
                         </div>
                     </div>
                 </div>

@@ -5,7 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { TimeOfDay, GameState, NightEvent } from '../types';
-import Player from './Player';
+import Player from './RealisticPlayer';  // CHANGED: Using realistic player
 import Island from './Island';
 import Nightflare from './Nightflare';
 import Enemies from './Enemies';
@@ -13,6 +13,8 @@ import ResourceNodes from './ResourceNodes';
 import Structures from './Structures';
 import { DamageNumbers } from './FloatingText';
 import { KillEffect } from './KillEffect';
+import EnvironmentalEffects from './EnvironmentalEffects';
+
 
 const GameScene: React.FC = () => {
   const gameState = useGameStore(s => s.gameState);
@@ -53,8 +55,12 @@ const GameScene: React.FC = () => {
           const next = prev + 1;
           if (timeOfDay === TimeOfDay.DAY && next >= 45) {
             setTimeOfDay(TimeOfDay.NIGHT);
-            setShowBanner(true);
-            setTimeout(() => setShowBanner(false), 4500);
+            // STABLE UI: Use global store notification instead of 3D Html
+            useGameStore.getState().showNotification(
+              useGameStore.getState().getNightName(useGameStore.getState().wave),
+              "Nightfall Detected",
+              "night"
+            );
             return 0;
           } else if (timeOfDay === TimeOfDay.NIGHT && next >= 70) {
             setTimeOfDay(TimeOfDay.DAY);
@@ -202,6 +208,7 @@ const GameScene: React.FC = () => {
       )}
       {gameState !== GameState.MAIN_MENU && <Enemies />}
       {gameState !== GameState.MAIN_MENU && <DamageNumbers />}
+      {gameState !== GameState.MAIN_MENU && <EnvironmentalEffects />}
 
       {novaVisual && <NovaVFX />}
 
@@ -227,24 +234,7 @@ const GameScene: React.FC = () => {
         />
       ))}
 
-      {showBanner && (
-        <Html center position={[0, 9, 0]}>
-          <div className="flex flex-col items-center animate-in zoom-in fade-in slide-in-from-top-12 duration-1000 pointer-events-none w-[90vw] sm:w-auto">
-            <div className="bg-slate-950/95 backdrop-blur-3xl px-8 sm:px-28 py-8 sm:py-14 text-center rounded-[2.5rem] sm:rounded-[5rem] border-2 border-red-600/50 shadow-[0_0_80px_rgba(239,68,68,0.4)]">
-              <div className="text-red-600 font-black tracking-[0.4em] sm:tracking-[0.9em] text-[10px] sm:text-[13px] uppercase mb-4 sm:mb-6 animate-pulse">Nightfall Detected</div>
-              <h1 className="text-white text-4xl sm:text-8xl md:text-9xl font-black italic tracking-tighter uppercase drop-shadow-[0_15px_30px_rgba(0,0,0,1)]">
-                {getNightName(wave)}
-              </h1>
-              {currentNightEvent && currentNightEvent !== NightEvent.NONE && (
-                <div className={`mt-3 sm:mt-4 text-xl sm:text-4xl font-black tracking-[0.2em] sm:tracking-[0.5em] uppercase animate-pulse 
-                    ${currentNightEvent === NightEvent.RUSH ? 'text-red-500' : (currentNightEvent === NightEvent.SIEGE ? 'text-orange-500' : 'text-purple-500')}`}>
-                  ⚠ {currentNightEvent} DETECTED ⚠
-                </div>
-              )}
-            </div>
-          </div>
-        </Html>
-      )}
+
     </group>
   );
 };

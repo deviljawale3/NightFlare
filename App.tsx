@@ -1,13 +1,11 @@
-
 import React, { Suspense, useState, useEffect, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Sky, ContactShadows, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from './store';
 import { GameState, TimeOfDay } from './types';
 import GameScene from './components/GameScene';
 import PremiumHUD from './components/PremiumHUD';
-import EnhancedCamera from './components/EnhancedCamera';
 import MainMenu from './components/MainMenu';
 import GameOver from './components/GameOver';
 import PauseMenu from './components/PauseMenu';
@@ -26,6 +24,10 @@ import LoadingScreen from './components/LoadingScreen';
 import { AchievementPopup, useAchievementStore } from './components/AchievementSystem';
 import { DailyRewardModal, useDailyRewardStore } from './components/DailyRewards';
 import SettingsPanel, { useSettingsStore } from './components/SettingsPanel';
+import ErrorBoundary from './components/ErrorBoundary';
+import SoundEffects from './components/SoundEffects';
+import HapticFeedback from './components/HapticFeedback';
+import ScreenEffects from './components/ScreenEffects';
 
 const SceneLighting: React.FC = () => {
   const timeOfDay = useGameStore(s => s.timeOfDay);
@@ -39,7 +41,6 @@ const SceneLighting: React.FC = () => {
     const isMenu = gameState === GameState.MAIN_MENU;
     const isTutorial = gameState === GameState.TUTORIAL;
 
-    // Increased night visibility
     const targetAmbient = isMenu ? 0.65 : (isNight ? 0.45 : 0.8);
     const targetDirIntensity = isMenu ? 1.5 : (isNight ? 0.7 : 1.8);
     const targetFogColor = new THREE.Color(isNight && !isMenu ? '#0a0a0a' : '#1a2e35');
@@ -78,30 +79,70 @@ const SceneLighting: React.FC = () => {
   );
 };
 
+// V8.0 HIGH PERFORMANCE CAMERA ENGINE - REDESIGNED FOR ABSOLUTE RELIABILITY
 const CameraManager: React.FC = () => {
-  const [playerPos, setPlayerPos] = useState<THREE.Vector3 | undefined>();
+  const { camera } = useThree();
+  const lookAtTarget = useRef(new THREE.Vector3());
 
   useFrame(() => {
-    if ((window as any).playerPos) {
-      setPlayerPos((window as any).playerPos);
+    // 1. Get Live State Directly from Store (Zero Latency)
+    const settings = useSettingsStore.getState();
+    const rawPos = (window as any).playerPos;
+    const playerPos = rawPos ? rawPos.clone() : new THREE.Vector3(0, 0, 0);
+
+    // 2. Logic Selection
+    const offset = new THREE.Vector3();
+    let targetFov = 50;
+
+    if (settings.cameraPreset === 'FREE') {
+      const rad = (settings.cameraAngle * Math.PI) / 180;
+      const d = settings.cameraDistance;
+      // Stable Orbital Sphere
+      offset.set(
+        Math.sin(rad) * d * 0.9,
+        d * 0.55 + 2,
+        Math.cos(rad) * d * 0.9
+      );
+      // Dynamic FOV for 'Cinematic' zoom feel
+      targetFov = Math.max(45, Math.min(65, 75 - (d * 0.8)));
+    } else {
+      switch (settings.cameraPreset) {
+        case 'CLOSE': offset.set(0, 1.8, 3.5); targetFov = 65; break;
+        case 'TOP_DOWN': offset.set(0, 22, 0); targetFov = 35; break;
+        case 'SIDE': offset.set(12, 3, 0); targetFov = 50; break;
+        case 'ISOMETRIC': offset.set(8, 8, 8); targetFov = 45; break;
+        default: offset.set(0, 6, 9); targetFov = 55; break; // Master Action Perspective
+      }
+    }
+
+    // 3. SNAPPY APPLICATION (Pro Response)
+    const targetPos = playerPos.clone().add(offset);
+    camera.position.lerp(targetPos, 0.15);
+
+    lookAtTarget.current.lerp(playerPos, 0.2);
+    camera.lookAt(lookAtTarget.current);
+
+    // 4. Hard Matrix Sync
+    if (camera instanceof THREE.PerspectiveCamera && camera.fov !== targetFov) {
+      camera.fov = targetFov;
+      camera.updateProjectionMatrix();
     }
   });
 
-  return <EnhancedCamera playerPosition={playerPos} />;
+  return null;
 };
 
 const App: React.FC = () => {
   const gameState = useGameStore(s => s.gameState);
   const screenShake = useGameStore(s => s.screenShake);
   const saveGame = useGameStore(s => s.saveGame);
-
-  // New Premium State
   const [isLoading, setIsLoading] = useState(true);
 
-  // Premium Store Hooks
+  // Store Hooks
   const { initializeAchievements } = useAchievementStore();
   const { initializeRewards, canClaimToday, setShowRewardModal } = useDailyRewardStore();
   const settings = useSettingsStore();
+  const cameraPreset = useSettingsStore(s => s.cameraPreset); // For Canvas key
 
   const [showInventory, setShowInventory] = useState(false);
   const [showCrafting, setShowCrafting] = useState(false);
@@ -111,20 +152,13 @@ const App: React.FC = () => {
   const [showSeason, setShowSeason] = useState(false);
 
   useEffect(() => {
-    // Initialize premium systems
     initializeAchievements();
     initializeRewards();
-
-    // Show daily reward after loading if available
     if (canClaimToday()) {
-      // Delay slightly to let loading finish
       setTimeout(() => setShowRewardModal(true), 3500);
     }
-
-    // Apply initial adjustments based on settings
     if (settings.textSize === 'large') document.documentElement.style.fontSize = '18px';
     else if (settings.textSize === 'small') document.documentElement.style.fontSize = '14px';
-
   }, []);
 
   useEffect(() => {
@@ -151,90 +185,80 @@ const App: React.FC = () => {
   const isModalOpen = showTournament || showFriends || showAnalytics || showSeason || settings.isOpen;
 
   return (
-    <div className="fixed inset-0 w-full h-[100dvh] bg-[#050505] overflow-hidden select-none safe-padding">
+    <ErrorBoundary>
+      <div className="fixed inset-0 w-full h-[100dvh] bg-[#050505] overflow-hidden select-none safe-padding">
+        <SoundEffects />
+        <HapticFeedback />
+        {(gameState === GameState.PLAYING || gameState === GameState.TUTORIAL) && <ScreenEffects />}
 
-      {/* 1. LOADING SCREEN (Global Overlay) */}
-      {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
+        {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
 
-      {/* 2. GLOBAL POPUPS (Always on top) */}
-      <AchievementPopup />
-      <DailyRewardModal />
-      {settings.isOpen && <SettingsPanel />}
-      <AmbientSounds />
+        <AchievementPopup />
+        <DailyRewardModal />
+        {settings.isOpen && <SettingsPanel />}
+        <AmbientSounds />
 
-      {/* 3. 3D RENDER LAYER (Only render if not loading to save resources) */}
-      {!isLoading && (
-        <div className="absolute inset-0 w-full h-full z-0 overflow-hidden" style={shakeStyle}>
-          <Canvas
-            shadows
-            frameloop="always" // Changed from demand for smoother gameplay
-            performance={{ min: 0.5 }} // Allow quality reduction under load
-            gl={{
-              antialias: settings.quality !== 'low',
-              stencil: false,
-              alpha: false,
-              powerPreference: settings.quality === 'low' ? "low-power" : "high-performance",
-              preserveDrawingBuffer: true
-            }}
-            dpr={[0.8, settings.quality === 'ultra' ? 1.5 : 1.2]} // Reduced for better performance
-          >
-            <CameraManager />
-            <SceneLighting />
-            <Suspense fallback={null}>
-              <GameScene />
-              {settings.shadows && (
-                <ContactShadows resolution={1024} scale={50} blur={2.5} opacity={0.65} far={20} color="#000000" />
-              )}
-            </Suspense>
-          </Canvas>
-        </div>
-      )}
+        {!isLoading && (
+          <div className="absolute inset-0 w-full h-full z-0 overflow-hidden" style={shakeStyle}>
+            <Canvas
+              shadows
+              gl={{
+                antialias: settings.quality !== 'low',
+                stencil: false,
+                alpha: false,
+                powerPreference: "high-performance",
+                preserveDrawingBuffer: true,
+                toneMapping: THREE.ACESFilmicToneMapping,
+                toneMappingExposure: 1.2
+              }}
+              dpr={[1, 2]}
+            >
+              <CameraManager />
+              <SceneLighting />
+              <Suspense fallback={null}>
+                <GameScene />
+                {settings.shadows && (
+                  <ContactShadows resolution={1024} scale={50} blur={2.5} opacity={0.65} far={20} color="#000000" />
+                )}
+              </Suspense>
+            </Canvas>
+          </div>
+        )}
 
-      {/* 4. UI INTERFACE LAYER */}
-      {!isLoading && (
-        <div className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-hidden safe-padding font-['Outfit']">
+        {!isLoading && (
+          <div className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-hidden safe-padding font-['Outfit']">
+            {gameState === GameState.MAIN_MENU && !isModalOpen && (
+              <MainMenu
+                showTournament={() => setShowTournament(true)}
+                showFriends={() => setShowFriends(true)}
+                showAnalytics={() => setShowAnalytics(true)}
+                showSeason={() => setShowSeason(true)}
+              />
+            )}
 
-          {/* State-specific UI components */}
-          {gameState === GameState.MAIN_MENU && !isModalOpen && (
-            <MainMenu
-              showTournament={() => setShowTournament(true)}
-              showFriends={() => setShowFriends(true)}
-              showAnalytics={() => setShowAnalytics(true)}
-              showSeason={() => setShowSeason(true)}
-            // Passing setShowSettings would require modifying MainMenu props
-            // For now MainMenu likely handles its own settings or we update it later
-            />
-          )}
+            {showTournament && <TournamentHub onBack={() => setShowTournament(false)} />}
+            {showFriends && <FriendsPanel onBack={() => setShowFriends(false)} />}
+            {showAnalytics && <AnalyticsDashboard onBack={() => setShowAnalytics(false)} />}
+            {showSeason && <SeasonPanel onBack={() => setShowSeason(false)} />}
 
-          {showTournament && <TournamentHub onBack={() => setShowTournament(false)} />}
-          {showFriends && <FriendsPanel onBack={() => setShowFriends(false)} />}
-          {showAnalytics && <AnalyticsDashboard onBack={() => setShowAnalytics(false)} />}
-          {showSeason && <SeasonPanel onBack={() => setShowSeason(false)} />}
+            {(gameState === GameState.PLAYING || gameState === GameState.PAUSED || gameState === GameState.TUTORIAL || gameState === GameState.LEVEL_CLEAR) && (
+              <PremiumHUD
+                onOpenInventory={() => setShowInventory(true)}
+                onOpenCrafting={() => setShowCrafting(true)}
+              />
+            )}
 
-          {(gameState === GameState.PLAYING || gameState === GameState.PAUSED || gameState === GameState.TUTORIAL || gameState === GameState.LEVEL_CLEAR) && (
-            <PremiumHUD
-              onOpenInventory={() => setShowInventory(true)}
-              onOpenCrafting={() => setShowCrafting(true)}
-            />
-          )}
+            {gameState === GameState.PAUSED && <PauseMenu />}
+            {gameState === GameState.GAME_OVER && <GameOver />}
+            {gameState === GameState.TUTORIAL && <TutorialOverlay />}
+            {gameState === GameState.LEVEL_CLEAR && <LevelClearMenu />}
 
-          {gameState === GameState.PAUSED && <PauseMenu />}
-          {gameState === GameState.GAME_OVER && <GameOver />}
-          {gameState === GameState.TUTORIAL && <TutorialOverlay />}
-          {gameState === GameState.LEVEL_CLEAR && <LevelClearMenu />}
-
-          {/* Modals */}
-          <CraftingMenu isOpen={showCrafting} onClose={() => setShowCrafting(false)} />
-          {showInventory && <InventoryPanel onClose={() => setShowInventory(false)} />}
-        </div>
-      )}
-
-      {!isLoading && gameState === GameState.PLAYING && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/5 text-[10px] font-black tracking-[0.6em] uppercase pointer-events-none drop-shadow-md">
-          Nightflare Core Protection Protocol Active
-        </div>
-      )}
-    </div>
+            <CraftingMenu isOpen={showCrafting} onClose={() => setShowCrafting(false)} />
+            {showInventory && <InventoryPanel onClose={() => setShowInventory(false)} />}
+          </div>
+        )}
+      </div>
+    </ErrorBoundary>
   );
 };
 

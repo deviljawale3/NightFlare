@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { EnemyType, GameState, EnemyClass, EnemyTarget, EnemyBehavior, IslandTheme, NightEvent, TimeOfDay } from '../types';
 import PremiumZombie from './PremiumZombie';
+import { soundEffects } from '../utils/soundEffects';
 
 const _centerVec = new THREE.Vector3(0, 0, 0);
 const _avoidVec = new THREE.Vector3();
@@ -223,8 +224,18 @@ const Enemies: React.FC = () => {
             }
           }));
 
-          if (en.health <= 0) { en.health = 0; en.dying = true; en.deathTime = now; }
-          else { en.hitTime = now; en.behavior = EnemyBehavior.CHASE; en.stateTimer = now / 1000; }
+          if (en.health <= 0) {
+            en.health = 0;
+            en.dying = true;
+            en.deathTime = now;
+            soundEffects.enemyDeath();
+          }
+          else {
+            en.hitTime = now;
+            en.behavior = EnemyBehavior.CHASE;
+            en.stateTimer = now / 1000;
+            soundEffects.enemyHit();
+          }
         }
       });
     };
@@ -245,8 +256,16 @@ const Enemies: React.FC = () => {
             }
           }));
 
-          if (en.health <= 0) { en.dying = true; en.deathTime = now; }
-          else { en.hitTime = now; en.behavior = EnemyBehavior.CHASE; }
+          if (en.health <= 0) {
+            en.dying = true;
+            en.deathTime = now;
+            soundEffects.enemyDeath();
+          }
+          else {
+            en.hitTime = now;
+            en.behavior = EnemyBehavior.CHASE;
+            soundEffects.enemyHit();
+          }
         }
       });
     };
@@ -300,7 +319,18 @@ const Enemies: React.FC = () => {
       let type: EnemyClass = 'STALKER';
       const roll = Math.random();
 
-      if (currentEvent === NightEvent.SIEGE) {
+      // Location-specific enemy spawning (20% chance)
+      const locationRoll = Math.random();
+      if (locationRoll < 0.2 && !currentEvent) {
+        // Spawn location-specific enemy
+        if (islandTheme === IslandTheme.FOREST && wave >= 2) {
+          type = 'FOREST_WOLF';
+        } else if (islandTheme === IslandTheme.VOLCANO && wave >= 3) {
+          type = 'FIRE_ELEMENTAL';
+        } else if (islandTheme === IslandTheme.ARCTIC && wave >= 4) {
+          type = 'ICE_WRAITH';
+        }
+      } else if (currentEvent === NightEvent.SIEGE) {
         if (roll < 0.6) type = 'BRUTE';
         else if (roll < 0.9) type = 'WRAITH';
         else type = 'STALKER';
@@ -317,7 +347,11 @@ const Enemies: React.FC = () => {
         STALKER: { health: 220, speed: 12.0 },
         BRUTE: { health: 2200, speed: 5.5 },
         WRAITH: { health: 550, speed: 17.0 },
-        VOID_WALKER: { health: 8500, speed: 4.8 }
+        VOID_WALKER: { health: 8500, speed: 4.8 },
+        // Location-specific enemies
+        FOREST_WOLF: { health: 300, speed: 14.0 },      // Fast pack hunter
+        FIRE_ELEMENTAL: { health: 450, speed: 10.0 },   // Medium speed, ranged
+        ICE_WRAITH: { health: 500, speed: 15.0 }        // Fast, freezing
       };
       const baseStats = statsMap[type];
       let mult = 1 + (level - 1) * 0.8 + (wave - 1) * 0.4;
@@ -337,6 +371,13 @@ const Enemies: React.FC = () => {
       enemiesRef.current.push(newEntity);
       lastSpawnTime.current = currentTime;
       listChanged = true;
+
+      // Play spawn sound
+      if (type === 'VOID_WALKER') {
+        soundEffects.bossRoar();
+      } else {
+        soundEffects.enemySpawn();
+      }
     }
 
     for (const enemy of enemiesRef.current) {
@@ -405,6 +446,7 @@ const Enemies: React.FC = () => {
           if (animElapsed > 0.6) {
             enemy.attackPhase = 'STRIKE'; enemy.attackAnimTimer = currentTime;
             const dmg = (enemy.type === 'BRUTE' ? 350 : 100) * (1 + level * 0.4);
+            soundEffects.enemyAttack();
             if (currentPos.distanceTo(playerPos) < 4.0) { damagePlayer(dmg * 0.15); if (enemy.type === 'BRUTE') triggerScreenShake(1.2); }
             else if (distToCore < 12) damageNightflare(dmg * 0.3);
             window.dispatchEvent(new CustomEvent('attack-impact', { detail: { position: currentPos.toArray() } }));

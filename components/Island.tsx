@@ -1,79 +1,146 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { IslandTheme } from '../types';
+import { RealisticTree, RealisticRock, RealisticGrass, RealisticBush } from './RealisticEnvironment';
 
 const Island: React.FC = () => {
   const islandTheme = useGameStore(s => s.islandTheme);
 
   const getColors = () => {
-    switch(islandTheme) {
-        case IslandTheme.VOLCANO: return { top: '#420a0a', bottom: '#1a0505', detail: '#f97316', plant: '#7c2d12' };
-        case IslandTheme.ARCTIC: return { top: '#e2e8f0', bottom: '#1e293b', detail: '#94a3b8', plant: '#ffffff' };
-        default: return { top: '#3a5a40', bottom: '#4a4e69', detail: '#6b705c', plant: '#588157' };
+    switch (islandTheme) {
+      case IslandTheme.VOLCANO: return { top: '#1a0505', bottom: '#0a0202', detail: '#f97316', secondary: '#7c2d12' };
+      case IslandTheme.ARCTIC: return { top: '#f8fafc', bottom: '#1e293b', detail: '#cbd5e1', secondary: '#94a3b8' };
+      default: return { top: '#1a2e20', bottom: '#2a1a10', detail: '#3a5a40', secondary: '#4a3a2a' };
     }
   };
 
   const colors = getColors();
 
+  // Generate static positions for elements once to prevent jitter
+  const elements = useMemo(() => {
+    const trees = [...Array(12)].map((_, i) => ({
+      position: [
+        (Math.random() - 0.5) * 35,
+        0,
+        (Math.random() - 0.5) * 35
+      ] as [number, number, number],
+      seed: Math.random()
+    })).filter(t => Math.sqrt(t.position[0] ** 2 + t.position[2] ** 2) < 20);
+
+    const rocks = [...Array(20)].map((_, i) => ({
+      position: [
+        (Math.random() - 0.5) * 45,
+        0,
+        (Math.random() - 0.5) * 45
+      ] as [number, number, number],
+      seed: Math.random()
+    })).filter(r => Math.sqrt(r.position[0] ** 2 + r.position[2] ** 2) < 22);
+
+    const foliage = [...Array(60)].map((_, i) => ({
+      position: [
+        (Math.random() - 0.5) * 40,
+        0,
+        (Math.random() - 0.5) * 40
+      ] as [number, number, number],
+      type: Math.random() > 0.6 ? 'grass' : 'bush'
+    })).filter(f => Math.sqrt(f.position[0] ** 2 + f.position[2] ** 2) < 21);
+
+    return { trees, rocks, foliage };
+  }, [islandTheme]);
+
   return (
     <group>
-      {/* Main Top Surface */}
-      <mesh receiveShadow position={[0, -0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[22, 8]} />
-        <meshStandardMaterial color={colors.top} flatShading roughness={0.8} />
+      {/* Main Top Surface - High Fidelity Tactical Terrain */}
+      <mesh receiveShadow position={[0, -0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[22, 128]} />
+        <meshStandardMaterial
+          color={colors.top}
+          roughness={0.8}
+          metalness={0.05}
+        />
       </mesh>
 
-      {/* Rocky Bottom */}
-      <mesh receiveShadow position={[0, -4.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[22, 9, 8]} />
-        <meshStandardMaterial color={colors.bottom} flatShading roughness={1} />
+      {/* Surface Texture: Subtle Ground Detail */}
+      <mesh receiveShadow position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[22.5, 64]} />
+        <meshStandardMaterial
+          color={colors.detail}
+          transparent
+          opacity={0.15}
+          wireframe
+        />
       </mesh>
 
-      {/* Side Details / Small Rocks at edges */}
-      {[...Array(14)].map((_, i) => {
-        const angle = (i / 14) * Math.PI * 2;
-        const radius = 20 + Math.random() * 4;
-        return (
-          <mesh 
-            key={i} 
-            position={[Math.cos(angle) * radius, -0.2, Math.sin(angle) * radius]} 
-            rotation={[Math.random(), Math.random(), Math.random()]}
-            castShadow
-          >
-            <dodecahedronGeometry args={[1 + Math.random() * 2, 0]} />
-            <meshStandardMaterial color={colors.detail} flatShading />
-          </mesh>
-        );
-      })}
+      {/* Deep Rocky Base */}
+      <mesh receiveShadow position={[0, -6, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[22, 12, 16]} />
+        <meshStandardMaterial
+          color={colors.bottom}
+          roughness={1}
+          flatShading
+        />
+      </mesh>
 
-      {/* Decorative Grassy Tufts / Ice Spikes / Lava Rocks */}
-      {[...Array(50)].map((_, i) => {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = Math.random() * 20;
-        return (
-          <mesh 
-            key={`grass-${i}`} 
-            position={[Math.cos(angle) * radius, -0.4, Math.sin(angle) * radius]}
-            rotation={[0, Math.random() * Math.PI, 0]}
-          >
-            <coneGeometry args={[0.2, islandTheme === IslandTheme.ARCTIC ? 1.5 : 0.8, 3]} />
-            <meshStandardMaterial color={colors.plant} emissive={islandTheme === IslandTheme.VOLCANO ? colors.detail : 'black'} emissiveIntensity={0.4} flatShading />
-          </mesh>
-        );
-      })}
+      {/* Edge Details: Realistic Rocks */}
+      {elements.rocks.map((rock, i) => (
+        <RealisticRock
+          key={`rock-${i}`}
+          position={rock.position}
+          theme={islandTheme}
+          seed={rock.seed}
+        />
+      ))}
 
+      {/* Realistic Trees */}
+      {elements.trees.map((tree, i) => (
+        <RealisticTree
+          key={`tree-${i}`}
+          position={tree.position}
+          theme={islandTheme}
+          seed={tree.seed}
+        />
+      ))}
+
+      {/* Realistic Foliage */}
+      {elements.foliage.map((item, i) => (
+        item.type === 'grass' ? (
+          <RealisticGrass
+            key={`fol-${i}`}
+            position={item.position}
+            theme={islandTheme}
+          />
+        ) : (
+          <RealisticBush
+            key={`fol-${i}`}
+            position={item.position}
+            theme={islandTheme}
+          />
+        )
+      ))}
+
+      {/* Environment Lighting based on Theme */}
       {islandTheme === IslandTheme.VOLCANO && (
-          <group>
-              <pointLight position={[0, 2, 0]} intensity={1} color="orange" distance={50} />
-              {[...Array(5)].map((_, i) => {
-                  const angle = (i / 5) * Math.PI * 2;
-                  return (
-                      <pointLight key={i} position={[Math.cos(angle)*15, 1, Math.sin(angle)*15]} intensity={5} color="red" distance={10} />
-                  );
-              })}
-          </group>
+        <group>
+          <pointLight position={[0, 4, 0]} intensity={2} color="#ff4400" distance={60} />
+          {[...Array(8)].map((_, i) => {
+            const angle = (i / 8) * Math.PI * 2;
+            return (
+              <pointLight
+                key={i}
+                position={[Math.cos(angle) * 18, 1, Math.sin(angle) * 18]}
+                intensity={4}
+                color="#ff2200"
+                distance={15}
+              />
+            );
+          })}
+        </group>
+      )}
+
+      {islandTheme === IslandTheme.ARCTIC && (
+        <pointLight position={[0, 10, 0]} intensity={0.5} color="#cbd5e1" distance={100} />
       )}
     </group>
   );

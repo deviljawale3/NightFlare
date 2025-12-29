@@ -302,8 +302,8 @@ const YouTubeStreaming: React.FC<YouTubeStreamingProps> = ({ onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-500 safe-padding">
-            <div className="bg-gradient-to-br from-gray-900 via-black to-gray-900 rounded-[2rem] w-full max-w-5xl border border-red-500/20 shadow-2xl relative overflow-hidden max-h-[95vh] flex flex-col animate-in zoom-in-95 duration-300 slide-in-from-bottom-5">
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-500 safe-padding" onClick={onClose}>
+            <div className="bg-gradient-to-br from-gray-900 via-black to-gray-900 rounded-[2rem] w-full max-w-5xl border border-red-500/20 shadow-2xl relative overflow-hidden max-h-[95vh] flex flex-col animate-in zoom-in-95 duration-300 slide-in-from-bottom-5" onClick={e => e.stopPropagation()}>
 
                 {/* Background */}
                 <div className="absolute top-0 right-0 w-96 h-96 bg-red-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -359,12 +359,38 @@ const YouTubeStreaming: React.FC<YouTubeStreamingProps> = ({ onClose }) => {
                                     </div>
                                 </div>
                             ) : (
-                                <button
-                                    onClick={initiateOAuth}
-                                    className="px-8 py-4 bg-[#FF0000] hover:bg-red-600 rounded-xl text-white font-black text-sm uppercase tracking-widest transition-all shadow-[0_0_30px_rgba(255,0,0,0.3)] hover:shadow-[0_0_50px_rgba(255,0,0,0.5)] hover:scale-105 active:scale-95 flex items-center gap-3"
-                                >
-                                    <span>Connect Account</span>
-                                </button>
+                                <div className="flex flex-col gap-4 w-full max-w-sm">
+                                    <button
+                                        onClick={initiateOAuth}
+                                        className="w-full px-8 py-4 bg-[#FF0000] hover:bg-red-600 rounded-xl text-white font-black text-sm uppercase tracking-widest transition-all shadow-[0_0_30px_rgba(255,0,0,0.3)] hover:shadow-[0_0_50px_rgba(255,0,0,0.5)] hover:scale-105 active:scale-95 flex items-center justify-center gap-3"
+                                    >
+                                        <span>Connect YouTube Account</span>
+                                    </button>
+
+                                    <div className="flex items-center gap-4 w-full">
+                                        <div className="h-px bg-white/10 flex-1"></div>
+                                        <span className="text-white/20 text-[10px] uppercase font-bold">OR</span>
+                                        <div className="h-px bg-white/10 flex-1"></div>
+                                    </div>
+
+                                    <button
+                                        onClick={() => window.open('https://studio.youtube.com/channel/UC/livestreaming/dashboard', '_blank')}
+                                        className="w-full px-8 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <span>Open Live Control Room</span>
+                                    </button>
+
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                                            } catch (e) { console.error(e); }
+                                        }}
+                                        className="w-full px-8 py-3 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-xl text-blue-400 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                                    >
+                                        <span>🖥️ Share Screen (Browser)</span>
+                                    </button>
+                                </div>
                             )}
                         </div>
                     ) : (
