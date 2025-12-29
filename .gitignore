@@ -7,9 +7,15 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies & build output
 node_modules
 dist
 dist-ssr
+
+# Vite generated temp files (CRITICAL FIX)
+vite.config.ts.timestamp-*.mjs
+
+# Local env files
 *.local
 
 # Editor directories and files
