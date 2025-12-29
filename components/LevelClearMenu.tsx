@@ -61,21 +61,33 @@ const LevelClearMenu: React.FC = () => {
       {/* Background Layer 1: Deep Space Gradient */}
       <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_center,_rgba(20,5,5,1)_0%,_rgba(0,0,0,1)_100%)]" />
 
-      {/* Background Layer 2: 3D Hyper-Warp */}
-      <div className="absolute inset-0 z-0 opacity-80">
-        <Canvas>
-          <PerspectiveCamera makeDefault position={[0, 0, 10]} />
-          <ambientLight intensity={0.5} />
+      {/* Composite 3D Layer: Warp Tunnel + Trophy */}
+      <div className="absolute inset-0 z-0">
+        <Canvas camera={{ position: [0, 1, 8], fov: 45 }}>
+          <ambientLight intensity={1.5} />
+          <pointLight position={[5, 10, 5]} intensity={4} color="#ffffff" />
+          <pointLight position={[-5, -10, -5]} intensity={2} color="#ff6b00" />
+
           <WarpTunnel />
+
+          {/* Trophy closer to camera */}
+          <Float speed={2.5} rotationIntensity={1.2} floatIntensity={0.8}>
+            <group position={[0, 0, 4]} scale={0.7}>
+              <Trophy />
+            </group>
+          </Float>
+
+          {/* Core in the distance */}
           <MenuCore />
-          <Sparkles count={100} scale={15} size={4} speed={0.4} opacity={0.5} color="#ffaa00" />
+
+          <Sparkles count={80} scale={12} size={3} speed={0.4} opacity={0.5} color="#ffaa00" />
         </Canvas>
       </div>
 
-      <div className="relative z-10 w-full max-w-2xl px-6 flex flex-col items-center text-center h-full justify-center">
+      <div className="relative z-10 w-full max-w-2xl px-6 flex flex-col items-center text-center h-full justify-center pointer-events-none">
 
         {/* Victory Header */}
-        <div className="mb-6 animate-in slide-in-from-top-12 duration-700">
+        <div className="mb-4 sm:mb-6 animate-in slide-in-from-top-12 duration-700">
           <h1 className="text-[12vw] sm:text-8xl font-black text-white italic tracking-tighter leading-none drop-shadow-[0_0_30px_rgba(255,107,0,0.6)]">
             VICTORY
           </h1>
@@ -88,19 +100,8 @@ const LevelClearMenu: React.FC = () => {
           </div>
         </div>
 
-        {/* 3D Trophy Showcase */}
-        <div className="w-64 h-64 sm:w-80 sm:h-80 relative mb-8 animate-in zoom-in duration-700 delay-150">
-          <div className="absolute inset-0 bg-gradient-to-b from-orange-500/20 to-transparent rounded-full blur-3xl" />
-          <Canvas camera={{ position: [0, 0, 4], fov: 45 }}>
-            <ambientLight intensity={1.5} />
-            <pointLight position={[5, 5, 5]} intensity={4} color="#ffffff" />
-            <pointLight position={[-5, -5, -5]} intensity={2} color="#ff6b00" />
-            <Float speed={4} rotationIntensity={1.5} floatIntensity={1}>
-              <Trophy />
-            </Float>
-            <Sparkles count={30} scale={3} size={2} speed={1} color="yellow" />
-          </Canvas>
-        </div>
+        {/* Empty space for 3D Trophy visible through UI */}
+        <div className="w-64 h-64 sm:w-80 sm:h-80 relative mb-4 sm:mb-8" />
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-4 w-full max-w-md mb-12 animate-in slide-in-from-bottom-8 duration-700 delay-300">
@@ -123,7 +124,7 @@ const LevelClearMenu: React.FC = () => {
 
           <button
             onClick={nextLevel}
-            className="w-full group relative bg-white text-black py-5 sm:py-6 rounded-[2rem] font-black text-xl sm:text-2xl hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_50px_rgba(255,255,255,0.4)] overflow-hidden italic tracking-tighter"
+            className="w-full group relative bg-white text-black py-4 sm:py-6 rounded-[1.5rem] sm:rounded-[2rem] font-black text-lg sm:text-2xl hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] overflow-hidden italic tracking-tighter pointer-events-auto"
           >
             <span className="relative z-10 flex items-center justify-center gap-3">
               INITIATE WARP <span className="text-lg opacity-40 group-hover:translate-x-1 transition-transform">➔</span>

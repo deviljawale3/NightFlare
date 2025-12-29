@@ -12,6 +12,7 @@ import Enemies from './Enemies';
 import ResourceNodes from './ResourceNodes';
 import Structures from './Structures';
 import { DamageNumbers } from './FloatingText';
+import { KillEffect } from './KillEffect';
 
 const GameScene: React.FC = () => {
   const gameState = useGameStore(s => s.gameState);
@@ -32,6 +33,7 @@ const GameScene: React.FC = () => {
   const [impacts, setImpacts] = useState<{ id: number, pos: [number, number, number] }[]>([]);
   const [beams, setBeams] = useState<{ id: number, from: [number, number, number], to: [number, number, number] }[]>([]);
   const [particles, setParticles] = useState<{ id: number, pos: [number, number, number], type: string }[]>([]);
+  const [killEffects, setKillEffects] = useState<{ id: string, pos: [number, number, number] }[]>([]);
 
   useEffect(() => {
     if (gameState !== GameState.PLAYING) return;
@@ -65,7 +67,7 @@ const GameScene: React.FC = () => {
     }, 1000);
 
     const handleImpact = (e: any) => {
-      const id = Date.now();
+      const id = Date.now() + Math.random(); // Guaranteed unique
       setImpacts(prev => [...prev, { id, pos: e.detail.position }]);
       setTimeout(() => setImpacts(p => p.filter(i => i.id !== id)), 600);
     };
@@ -91,7 +93,13 @@ const GameScene: React.FC = () => {
     window.addEventListener('attack-impact', handleImpact);
     window.addEventListener('nightflare-nova', handleNova);
     window.addEventListener('pylon-fire', handlePylonFire);
+    const handleEnemyKilled = (e: any) => {
+      const id = Date.now().toString() + Math.random();
+      setKillEffects(prev => [...prev, { id, pos: e.detail.position }]);
+    };
+
     window.addEventListener('resource-collected', handleResourceCollect);
+    window.addEventListener('enemy-killed', handleEnemyKilled);
 
     return () => {
       clearInterval(interval);
@@ -99,12 +107,91 @@ const GameScene: React.FC = () => {
       window.removeEventListener('nightflare-nova', handleNova);
       window.removeEventListener('pylon-fire', handlePylonFire);
       window.removeEventListener('resource-collected', handleResourceCollect);
+      window.removeEventListener('enemy-killed', handleEnemyKilled);
     };
   }, [gameState, timeOfDay, setTimeOfDay, nextWave, decrementTimer, updateChallenge, challengeState]);
 
   return (
     <group>
       <Island />
+
+      {/* MAP DECORATIONS */}
+      {gameState !== GameState.MAIN_MENU && (
+        <>
+          {/* Rocks scattered around */}
+          {[...Array(25)].map((_, i) => {
+            const angle = (i / 25) * Math.PI * 2 + Math.random() * 0.5;
+            const distance = 12 + Math.random() * 15;
+            const size = 0.3 + Math.random() * 0.5;
+            return (
+              <mesh
+                key={`rock-${i}`}
+                position={[
+                  Math.cos(angle) * distance,
+                  size * 0.3,
+                  Math.sin(angle) * distance
+                ]}
+                rotation={[
+                  Math.random() * Math.PI,
+                  Math.random() * Math.PI,
+                  Math.random() * Math.PI
+                ]}
+                castShadow
+                receiveShadow
+              >
+                <dodecahedronGeometry args={[size, 0]} />
+                <meshStandardMaterial color="#4a4a4a" roughness={0.9} metalness={0.1} />
+              </mesh>
+            );
+          })}
+
+          {/* Grass patches */}
+          {[...Array(40)].map((_, i) => {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * 30; // Random spread
+            const x = Math.cos(angle) * dist;
+            const z = Math.sin(angle) * dist;
+            const size = 0.8 + Math.random() * 1.2;
+            return (
+              <mesh
+                key={`grass-${i}`}
+                position={[x, 0.05, z]}
+                rotation={[-Math.PI / 2, 0, Math.random() * Math.PI * 2]}
+                receiveShadow
+              >
+                <circleGeometry args={[size, 8]} />
+                <meshStandardMaterial color="#2d5016" transparent opacity={0.6} roughness={1} />
+              </mesh>
+            );
+          })}
+
+          {/* Small bushes */}
+          {[...Array(15)].map((_, i) => {
+            const angle = (i / 15) * Math.PI * 2;
+            const distance = 10 + Math.random() * 12;
+            return (
+              <group
+                key={`bush-${i}`}
+                position={[
+                  Math.cos(angle) * distance,
+                  0.3,
+                  Math.sin(angle) * distance
+                ]}
+              >
+                <mesh castShadow>
+                  <sphereGeometry args={[0.5, 8, 8]} />
+                  <meshStandardMaterial color="#1a3d0a" roughness={0.95} />
+                </mesh>
+                <mesh position={[0.2, 0.2, 0.2]} castShadow>
+                  <sphereGeometry args={[0.3, 8, 8]} />
+                  <meshStandardMaterial color="#2d5016" roughness={0.95} />
+                </mesh>
+              </group>
+            );
+          })}
+        </>
+      )}
+
       <Nightflare />
       {gameState !== GameState.MAIN_MENU && (
         <>
@@ -132,16 +219,24 @@ const GameScene: React.FC = () => {
         <ResourceParticleEffect key={p.id} startPos={p.pos} type={p.type} />
       ))}
 
+      {killEffects.map(k => (
+        <KillEffect
+          key={k.id}
+          position={k.pos}
+          onComplete={() => setKillEffects(prev => prev.filter(e => e.id !== k.id))}
+        />
+      ))}
+
       {showBanner && (
         <Html center position={[0, 9, 0]}>
-          <div className="flex flex-col items-center animate-in zoom-in fade-in slide-in-from-top-12 duration-1000 pointer-events-none">
-            <div className="bg-slate-950/95 backdrop-blur-3xl px-28 py-14 text-center rounded-[5rem] border-2 border-red-600/50 shadow-[0_0_120px_rgba(239,68,68,0.5)]">
-              <div className="text-red-600 font-black tracking-[0.9em] text-[13px] uppercase mb-6 animate-pulse">Nightfall Detected</div>
-              <h1 className="text-white text-8xl md:text-9xl font-black italic tracking-tighter uppercase drop-shadow-[0_25px_50px_rgba(0,0,0,1)]">
+          <div className="flex flex-col items-center animate-in zoom-in fade-in slide-in-from-top-12 duration-1000 pointer-events-none w-[90vw] sm:w-auto">
+            <div className="bg-slate-950/95 backdrop-blur-3xl px-8 sm:px-28 py-8 sm:py-14 text-center rounded-[2.5rem] sm:rounded-[5rem] border-2 border-red-600/50 shadow-[0_0_80px_rgba(239,68,68,0.4)]">
+              <div className="text-red-600 font-black tracking-[0.4em] sm:tracking-[0.9em] text-[10px] sm:text-[13px] uppercase mb-4 sm:mb-6 animate-pulse">Nightfall Detected</div>
+              <h1 className="text-white text-4xl sm:text-8xl md:text-9xl font-black italic tracking-tighter uppercase drop-shadow-[0_15px_30px_rgba(0,0,0,1)]">
                 {getNightName(wave)}
               </h1>
               {currentNightEvent && currentNightEvent !== NightEvent.NONE && (
-                <div className={`mt-4 text-4xl font-black tracking-[0.5em] uppercase animate-pulse 
+                <div className={`mt-3 sm:mt-4 text-xl sm:text-4xl font-black tracking-[0.2em] sm:tracking-[0.5em] uppercase animate-pulse 
                     ${currentNightEvent === NightEvent.RUSH ? 'text-red-500' : (currentNightEvent === NightEvent.SIEGE ? 'text-orange-500' : 'text-purple-500')}`}>
                   ⚠ {currentNightEvent} DETECTED ⚠
                 </div>
@@ -156,22 +251,46 @@ const GameScene: React.FC = () => {
 
 const ResourceParticleEffect: React.FC<{ startPos: [number, number, number], type: string }> = ({ startPos, type }) => {
   const ref = useRef<THREE.Group>(null);
+  const startTime = useRef(performance.now());
   const color = type === 'wood' ? '#fbbf24' : (type === 'stone' ? '#94a3b8' : (type === 'lightShards' ? '#22d3ee' : '#ef4444'));
 
   useFrame((state, delta) => {
     if (!ref.current) return;
+    const elapsed = (performance.now() - startTime.current) / 1000;
     const playerPos = (window as any).playerPos || new THREE.Vector3();
-    const target = playerPos.clone().add(new THREE.Vector3(0, 1.5, 0));
-    ref.current.position.lerp(target, 0.15);
-    ref.current.scale.multiplyScalar(0.96);
+
+    // PREMIUM: Add vertical arc (sin wave over time)
+    const arcHeight = Math.sin(elapsed * Math.PI) * 1.5;
+    const target = playerPos.clone().add(new THREE.Vector3(0, 1.5 + arcHeight, 0));
+
+    // Smooth frame-rate independent lerp
+    const alpha = 1 - Math.exp(-12 * delta);
+    ref.current.position.lerp(target, alpha);
+
+    // SPIRAL: add subtle rotation
+    ref.current.rotation.y += delta * 15;
+    ref.current.rotation.x += delta * 10;
+
+    // Dynamic scaling
+    if (elapsed > 0.4) {
+      ref.current.scale.multiplyScalar(Math.pow(0.92, delta * 60));
+    }
   });
 
   return (
     <group ref={ref} position={startPos as any}>
-      <mesh>
-        <boxGeometry args={[0.3, 0.3, 0.3]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={20} />
+      <mesh castShadow>
+        <boxGeometry args={[0.2, 0.2, 0.2]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={10}
+          roughness={0.1}
+          metalness={0.8}
+        />
       </mesh>
+      {/* Add a small trail or glow */}
+      <pointLight color={color} intensity={10} distance={3} />
     </group>
   );
 };

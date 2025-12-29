@@ -1,11 +1,8 @@
 import React, { useRef, useEffect } from 'react';
 import { useGameStore } from '../store';
+import * as THREE from 'three';
 
-interface MinimapProps {
-    playerPosition?: { x: number; z: number };
-}
-
-const Minimap: React.FC<MinimapProps> = ({ playerPosition }) => {
+const Minimap: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const { resources } = useGameStore();
 
@@ -16,159 +13,141 @@ const Minimap: React.FC<MinimapProps> = ({ playerPosition }) => {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let animationFrameId: number;
 
-        // Map settings
-        const mapSize = 120;
-        const worldSize = 50; // Adjust based on your game world size
-        const scale = mapSize / worldSize;
-        const centerX = mapSize / 2;
-        const centerY = mapSize / 2;
+        const render = () => {
+            // Read direct from window to avoid React overhead
+            const playerPosVec = (window as any).playerPos;
+            const playerX = playerPosVec ? playerPosVec.x : 0;
+            const playerZ = playerPosVec ? playerPosVec.z : 0;
+            const enemies = (window as any).gameEnemies || [];
 
-        // Draw map background
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(0, 0, mapSize, mapSize);
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw border
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0, 0, mapSize, mapSize);
+            // Map settings
+            const mapSize = 120;
+            const worldSize = 50;
+            const scale = mapSize / worldSize;
+            const centerX = mapSize / 2;
+            const centerY = mapSize / 2;
 
-        // Draw grid
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i <= 4; i++) {
-            const pos = (mapSize / 4) * i;
-            ctx.beginPath();
-            ctx.moveTo(pos, 0);
-            ctx.lineTo(pos, mapSize);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(0, pos);
-            ctx.lineTo(mapSize, pos);
-            ctx.stroke();
-        }
+            // Draw map background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(0, 0, mapSize, mapSize);
 
-        // Draw collectables (resources)
-        if (resources) {
-            // Draw wood (brown dots)
-            ctx.fillStyle = 'rgba(139, 69, 19, 0.8)';
-            for (let i = 0; i < 5; i++) {
-                const angle = (Math.PI * 2 * i) / 5;
-                const x = centerX + Math.cos(angle) * 30;
-                const y = centerY + Math.sin(angle) * 30;
+            // Draw border
+            ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)'; // Cyan-ish for premium
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, mapSize, mapSize);
+
+            // Draw grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const pos = (mapSize / 4) * i;
                 ctx.beginPath();
-                ctx.arc(x, y, 2, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.moveTo(pos, 0);
+                ctx.lineTo(pos, mapSize);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, pos);
+                ctx.lineTo(mapSize, pos);
+                ctx.stroke();
             }
 
-            // Draw light shards (yellow sparkles)
-            ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
-            for (let i = 0; i < 3; i++) {
-                const angle = (Math.PI * 2 * i) / 3 + Math.PI / 6;
-                const x = centerX + Math.cos(angle) * 40;
-                const y = centerY + Math.sin(angle) * 40;
-                ctx.beginPath();
-                ctx.arc(x, y, 2.5, 0, Math.PI * 2);
-                ctx.fill();
-                // Add glow
-                ctx.shadowBlur = 4;
-                ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            }
-        }
+            // Draw collectables (resources)
+            // Use store resources count as a hint? No, we need positions.
+            // ResourceNodes are in the store!
+            const nodes = useGameStore.getState().nodes;
 
-        // Draw enemies (red dots with pulse) - Get from global window object
-        const enemies = (window as any).gameEnemies || [];
-        if (enemies && enemies.length > 0) {
-            const time = Date.now() / 1000;
-            enemies.forEach((enemy: any, index: number) => {
-                if (!enemy.health || enemy.health <= 0) return;
-
-                // Calculate position relative to player
-                const relX = (enemy.position?.[0] || 0) - (playerPosition?.x || 0);
-                const relZ = (enemy.position?.[2] || 0) - (playerPosition?.z || 0);
-
+            nodes.forEach(node => {
+                const relX = node.position[0] - playerX;
+                const relZ = node.position[2] - playerZ;
                 const x = centerX + relX * scale;
                 const y = centerY + relZ * scale;
 
-                // Only draw if within map bounds
                 if (x >= 0 && x <= mapSize && y >= 0 && y <= mapSize) {
-                    // Pulsing effect
-                    const pulse = Math.sin(time * 3 + index) * 0.3 + 1;
-                    const radius = 3 * pulse;
-
-                    // Draw glow
-                    ctx.shadowBlur = 8;
-                    ctx.shadowColor = 'rgba(255, 0, 0, 0.8)';
-                    ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+                    ctx.fillStyle = node.type === 'TREE' ? '#fbbf24' :
+                        (node.type === 'ROCK' ? '#94a3b8' :
+                            (node.type === 'FOOD' ? '#f87171' : '#22d3ee'));
                     ctx.beginPath();
-                    ctx.arc(x, y, radius, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.shadowBlur = 0;
-
-                    // Draw core
-                    ctx.fillStyle = 'rgba(255, 100, 100, 1)';
-                    ctx.beginPath();
-                    ctx.arc(x, y, radius * 0.5, 0, Math.PI * 2);
+                    ctx.arc(x, y, 2, 0, Math.PI * 2);
                     ctx.fill();
                 }
             });
-        }
 
-        // Draw player (center, blue triangle pointing up)
-        ctx.save();
-        ctx.translate(centerX, centerY);
+            // Draw enemies
+            if (enemies && enemies.length > 0) {
+                const time = Date.now() / 1000;
+                enemies.forEach((enemy: any, index: number) => {
+                    if (!enemy.health || enemy.health <= 0) return;
 
-        // Player glow
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = 'rgba(0, 150, 255, 0.8)';
+                    const ePos = enemy.position; // [x, y, z] or object
+                    const eX = Array.isArray(ePos) ? ePos[0] : ePos.x;
+                    const eZ = Array.isArray(ePos) ? ePos[2] : ePos.z;
 
-        // Player triangle
-        ctx.fillStyle = 'rgba(0, 150, 255, 1)';
-        ctx.beginPath();
-        ctx.moveTo(0, -6);
-        ctx.lineTo(-4, 4);
-        ctx.lineTo(4, 4);
-        ctx.closePath();
-        ctx.fill();
+                    const relX = eX - playerX;
+                    const relZ = eZ - playerZ;
 
-        // Player border
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+                    const x = centerX + relX * scale;
+                    const y = centerY + relZ * scale;
 
-        ctx.shadowBlur = 0;
-        ctx.restore();
+                    if (x >= 0 && x <= mapSize && y >= 0 && y <= mapSize) {
+                        const pulse = Math.sin(time * 3 + index) * 0.3 + 1;
+                        const radius = 2.5 * pulse;
 
-        // Draw Nightflare core (center, orange circle)
-        ctx.fillStyle = 'rgba(255, 107, 0, 0.8)';
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = 'rgba(255, 107, 0, 0.6)';
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+                        ctx.shadowBlur = 4;
+                        ctx.shadowColor = 'rgba(255, 0, 0, 0.8)';
+                        ctx.fillStyle = enemy.type === 'BRUTE' ? '#ff4400' : '#ff0000';
+                        ctx.beginPath();
+                        ctx.arc(x, y, radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.shadowBlur = 0;
+                    }
+                });
+            }
 
-        // Draw core border
-        ctx.strokeStyle = 'rgba(255, 150, 0, 1)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+            // Draw player (center)
+            ctx.save();
+            ctx.translate(centerX, centerY);
 
-    }, [playerPosition, resources]);
+            // Get player rotation if possible, otherwise just point up
+            // Assuming player is always "up" relative to camera if camera follows? 
+            // In this minimap implementation logic, we are translating world coordinates relative to player center. 
+            // So objects move around the player. The player is fixed at center.
+
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(6, 182, 212, 0.8)';
+            ctx.fillStyle = '#22d3ee';
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.lineTo(-4, 4);
+            ctx.lineTo(4, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            animationFrameId = requestAnimationFrame(render);
+        };
+
+        render();
+
+        return () => {
+            cancelAnimationFrame(animationFrameId);
+        };
+    }, []); // Run once on mount
 
     return (
-        <div className="relative">
+        <div className="relative group">
             <canvas
                 ref={canvasRef}
                 width={120}
                 height={120}
-                className="rounded-xl border-2 border-white/20 shadow-2xl"
+                className="rounded-xl border-2 border-cyan-400/30 bg-black/60 backdrop-blur-md shadow-[0_0_20px_rgba(6,182,212,0.2)]"
             />
-            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[7px] text-white/50 font-bold uppercase tracking-wider whitespace-nowrap">
-                Tactical Map
+            <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[8px] text-cyan-400/60 font-black uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                RADAR
             </div>
         </div>
     );

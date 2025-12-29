@@ -12,7 +12,7 @@ const ResourceNodes: React.FC = () => {
   useEffect(() => {
     const newNodes: ResourceNode[] = [];
     const types: ResourceNode['type'][] = ['TREE', 'ROCK', 'CRYSTAL', 'FOOD'];
-    const count = 75;
+    const count = 45; // Reduced from 75 for performance
 
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -167,7 +167,6 @@ const NodeItem = React.forwardRef<THREE.Group, { data: ResourceNode; onHarvest: 
             <octahedronGeometry args={[0.65]} />
             <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={80} transparent opacity={0.4} />
           </mesh>
-          <pointLight intensity={12} distance={12} color="#00e5ff" />
         </group>
       )}
 
@@ -182,7 +181,6 @@ const NodeItem = React.forwardRef<THREE.Group, { data: ResourceNode; onHarvest: 
             <boxGeometry args={[0.8, 0.8, 0.8]} />
             <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={60} transparent opacity={0.5} />
           </mesh>
-          <pointLight intensity={8} distance={8} color="#ff1744" />
         </group>
       )}
     </group>

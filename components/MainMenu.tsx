@@ -1,14 +1,16 @@
-
 import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../store';
 import { GameState } from '../types';
 import DeeJayLabsLogo from './DeeJayLabsLogo';
 import HowToPlay from './HowToPlay';
 import SettingsPanel, { useSettingsStore } from './SettingsPanel';
-import ChatPanel from './ChatPanel';
+import EnhancedChat from './EnhancedChat';
+import EnhancedUserProfile from './EnhancedUserProfile';
+import YouTubeStreaming from './YouTubeStreaming';
 import ArenaHub from './ArenaHub';
 import BattleHistory from './BattleHistory';
 import MultiplayerToggle from './MultiplayerToggle';
+import OrientationToggle from './OrientationToggle';
 
 interface MainMenuProps {
   showTournament?: () => void;
@@ -21,7 +23,8 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
   const {
     resetGame, loadGame, lastWave, bestScore, userProfile,
     updateUserProfile, leaderboard, getNightName,
-    lives, lastLifeRegen, checkLifeRegen, giftLife
+    lives, lastLifeRegen, checkLifeRegen, giftLife,
+    wave, score, kills // Add current game stats
   } = useGameStore();
 
   const settings = useSettingsStore();
@@ -61,7 +64,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
   const avatarOptions = ['🤠', '🦁', '🦊', '🦉', '💀', '🤖', '👽', '👑'];
 
   return (
-    <div className="fixed inset-0 w-full h-full flex flex-col items-center bg-gradient-to-b from-black/10 via-black/30 to-black/90 backdrop-blur-[1px] pointer-events-auto overflow-y-auto px-6 custom-scrollbar z-[100] safe-padding">
+    <div className="fixed inset-0 w-full h-[100dvh] flex flex-col items-center bg-gradient-to-b from-black/10 via-black/30 to-black/90 backdrop-blur-[1px] pointer-events-auto overflow-y-auto px-6 custom-scrollbar z-[100] safe-padding">
 
       {/* Life Counter (Top Left) - MOBILE OPTIMIZED */}
       <div className="fixed top-3 sm:top-6 left-3 sm:left-6 z-[120]">
@@ -83,15 +86,20 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
 
       {/* Profile Header - MOBILE OPTIMIZED */}
       <div className="fixed top-3 sm:top-6 right-3 sm:right-6 z-[120]">
-        <button onClick={() => setShowProfile(true)} className="flex items-center gap-2 sm:gap-3 bg-black/60 backdrop-blur-md px-2 sm:px-4 py-1.5 sm:py-2 rounded-full border border-white/10 shadow-xl hover:scale-105 transition-all group">
-          <span className="text-white text-[10px] sm:text-xs font-black uppercase tracking-wider text-right hidden sm:block">
-            {userProfile.name}<br />
-            <span className="text-[#3a86ff] text-[9px]">{bestScore.toLocaleString()} PTS</span>
-          </span>
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-orange-600 border-2 border-white flex items-center justify-center text-xl sm:text-2xl shadow-lg group-hover:rotate-12 transition-transform">
-            {userProfile.avatar}
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-black/60 backdrop-blur-md rounded-full border border-white/10 shadow-xl flex items-center justify-center">
+            <OrientationToggle className="p-0" />
           </div>
-        </button>
+          <button onClick={() => setShowProfile(true)} className="flex items-center gap-2 sm:gap-3 bg-black/60 backdrop-blur-md px-2 sm:px-4 py-1.5 sm:py-2 rounded-full border border-white/10 shadow-xl hover:scale-105 transition-all group">
+            <span className="text-white text-[10px] sm:text-xs font-black uppercase tracking-wider text-right hidden sm:block">
+              {userProfile.name}<br />
+              <span className="text-[#3a86ff] text-[9px]">{bestScore.toLocaleString()} PTS</span>
+            </span>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-orange-600 border-2 border-white flex items-center justify-center text-xl sm:text-2xl shadow-lg group-hover:rotate-12 transition-transform">
+              {userProfile.avatar}
+            </div>
+          </button>
+        </div>
       </div>
 
       <div className="w-full max-w-md flex flex-col items-center justify-start pt-24 sm:pt-12 pb-8 min-h-full animate-in fade-in zoom-in duration-700">
@@ -392,7 +400,7 @@ const MainMenu: React.FC<MainMenuProps> = ({ showTournament, showFriends, showAn
                 <div className="text-[10px] text-white/30 uppercase tracking-widest mt-1">Request Supplies & Chat</div>
               </div>
 
-              <ChatPanel />
+              <EnhancedChat />
 
             </div>
           </div>

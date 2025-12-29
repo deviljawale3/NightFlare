@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { EnemyType, GameState, EnemyClass, EnemyTarget, EnemyBehavior, IslandTheme, NightEvent, TimeOfDay } from '../types';
+import PremiumZombie from './PremiumZombie';
 
 const _centerVec = new THREE.Vector3(0, 0, 0);
 const _avoidVec = new THREE.Vector3();
@@ -33,8 +34,11 @@ class EnemyEntity implements EnemyType {
   lastVelocity: THREE.Vector3 = new THREE.Vector3(0, 0, 1);
   lastAttackTime: number = 0;
   seed: number;
-  scored: boolean = false;
+  scored: boolean = false; // CRITICAL: Prevent duplicate score awards
+  killRecorded: boolean = false; // CRITICAL: Prevent duplicate kill records
   lerpPosition: THREE.Vector3;
+  stunTimer: number = 0; // New: Logic to stun enemy
+
 
   constructor(base: EnemyType) {
     this.id = base.id;
@@ -263,7 +267,9 @@ const Enemies: React.FC = () => {
   useFrame((state, delta) => {
     if (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) return;
     const timeOfDay = useGameStore.getState().timeOfDay;
-    if (timeOfDay === TimeOfDay.DAY) return;
+
+    // Allow spawning during day but at reduced rate
+    const isDayTime = timeOfDay === TimeOfDay.DAY;
 
     const currentTime = state.clock.getElapsedTime();
     const nowMs = performance.now();
@@ -271,7 +277,13 @@ const Enemies: React.FC = () => {
 
     const currentEvent = useGameStore.getState().currentNightEvent;
     let spawnRate = Math.max(0.3, 3.2 / (1 + (level - 1) * 0.9 + (wave - 1) * 0.5));
-    let maxEnemies = 12 + level * 7 + wave * 3;
+    let maxEnemies = Math.min(25, 12 + level * 7 + wave * 3);
+
+    // Reduce spawn rate and max enemies during day for playability
+    if (isDayTime) {
+      spawnRate *= 3.0; // Spawn 3x slower during day
+      maxEnemies = Math.floor(maxEnemies * 0.4); // 40% max enemies during day
+    }
 
     if (currentEvent === NightEvent.RUSH) { spawnRate *= 0.4; maxEnemies *= 1.8; }
     else if (currentEvent === NightEvent.SIEGE) { spawnRate *= 1.5; maxEnemies *= 0.6; }
@@ -318,7 +330,7 @@ const Enemies: React.FC = () => {
         position: spawnPos,
         health: baseStats.health * mult,
         maxHealth: baseStats.health * mult,
-        speed: baseStats.speed * (1 + level * 0.12),
+        speed: baseStats.speed * 0.4 * (1 + level * 0.08), // FIXED: Reduced from (1 + level * 0.12)
         target: 'NIGHTFLARE',
         behavior: EnemyBehavior.PATROL
       });
@@ -329,14 +341,41 @@ const Enemies: React.FC = () => {
 
     for (const enemy of enemiesRef.current) {
       if (enemy.dying) {
-        if (!enemy.scored) {
+        // CRITICAL: Only record kill once
+        if (!enemy.killRecorded) {
           recordEnemyKill(enemy.type);
+          enemy.killRecorded = true;
           enemy.scored = true;
+
+          // Emit kill event for visual feedback
+          window.dispatchEvent(new CustomEvent('enemy-killed', {
+            detail: { position: enemy.position, type: enemy.type }
+          }));
+
+          // FEATURE: Stun nearby enemies when one dies to allow collecting loot
+          const deathPos = new THREE.Vector3(...enemy.position);
+          enemiesRef.current.forEach(other => {
+            if (other !== enemy && !other.dying && new THREE.Vector3(...other.position).distanceTo(deathPos) < 12) {
+              other.stunTimer = nowMs + 1200; // 1.2s stun
+            }
+          });
         }
+
         if (nowMs - enemy.deathTime > 1600) { continue; }
         survivors.push(enemy); continue;
       }
       const currentPos = new THREE.Vector3(...enemy.position);
+
+      // Check Stun
+      if (nowMs < enemy.stunTimer) {
+        // Shake effect for stun
+        const shakeX = (Math.random() - 0.5) * 0.2;
+        const shakeZ = (Math.random() - 0.5) * 0.2;
+        enemy.lerpPosition.set(enemy.position[0] + shakeX, enemy.position[1], enemy.position[2] + shakeZ);
+        survivors.push(enemy);
+        continue;
+      }
+
       const toPlayer = playerPos.clone().sub(currentPos);
       const distToPlayer = toPlayer.length();
       const distToCore = currentPos.length();
@@ -355,7 +394,8 @@ const Enemies: React.FC = () => {
 
       const isAttacking = enemy.attackPhase !== 'IDLE';
       const attackRange = enemy.type === 'BRUTE' ? 12 : 9;
-      if (!isAttacking && (currentPos.distanceTo(moveTarget) < attackRange || distToCore < 10) && currentTime - enemy.lastAttackTime > (enemy.type === 'BRUTE' ? 4 : 2)) {
+      // REFINED: Slower attack rate (3.5s / 6s) to be less overwhelming
+      if (!isAttacking && (currentPos.distanceTo(moveTarget) < attackRange || distToCore < 10) && currentTime - enemy.lastAttackTime > (enemy.type === 'BRUTE' ? 6 : 3.5)) {
         enemy.attackPhase = 'WINDUP'; enemy.attackAnimTimer = currentTime;
       }
       if (isAttacking) {
@@ -468,13 +508,17 @@ const EnemyRenderer: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
   });
 
   const renderModel = () => {
-    switch (entity.type) {
-      case 'STALKER': return <EnhancedStalker position={[0, 0, 0]} seed={entity.seed} />;
-      case 'BRUTE': return <EnhancedBrute position={[0, 0, 0]} seed={entity.seed} />;
-      case 'WRAITH': return <EnhancedWraith position={[0, 0, 0]} seed={entity.seed} />;
-      case 'VOID_WALKER': return <EnhancedVoidWalker position={[0, 0, 0]} seed={entity.seed} />;
-      default: return null;
-    }
+    const isStunned = performance.now() < entity.stunTimer;
+    return (
+      <PremiumZombie
+        position={[0, 0, 0]}
+        seed={entity.seed}
+        type={entity.type}
+        isAttacking={entity.attackPhase !== 'IDLE'}
+        isDying={entity.dying}
+        isStunned={isStunned}
+      />
+    );
   };
 
   const skinColor = entity.type === 'WRAITH' ? '#9d00ff' : (entity.type === 'BRUTE' ? '#ff6600' : '#ff4400');
@@ -487,7 +531,7 @@ const EnemyRenderer: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
           <meshStandardMaterial color={skinColor} transparent opacity={0.6} />
         </mesh>
       </group>
-      {!entity.dying && renderModel()}
+      {renderModel()}
     </group>
   );
 };

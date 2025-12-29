@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { useGameStore } from './store';
 import { GameState, TimeOfDay } from './types';
 import GameScene from './components/GameScene';
-import RealisticHUD from './components/RealisticHUD';
+import PremiumHUD from './components/PremiumHUD';
 import EnhancedCamera from './components/EnhancedCamera';
 import MainMenu from './components/MainMenu';
 import GameOver from './components/GameOver';
@@ -151,7 +151,7 @@ const App: React.FC = () => {
   const isModalOpen = showTournament || showFriends || showAnalytics || showSeason || settings.isOpen;
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-[#050505] overflow-hidden select-none">
+    <div className="fixed inset-0 w-full h-[100dvh] bg-[#050505] overflow-hidden select-none safe-padding">
 
       {/* 1. LOADING SCREEN (Global Overlay) */}
       {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
@@ -167,6 +167,8 @@ const App: React.FC = () => {
         <div className="absolute inset-0 w-full h-full z-0 overflow-hidden" style={shakeStyle}>
           <Canvas
             shadows
+            frameloop="always" // Changed from demand for smoother gameplay
+            performance={{ min: 0.5 }} // Allow quality reduction under load
             gl={{
               antialias: settings.quality !== 'low',
               stencil: false,
@@ -174,7 +176,7 @@ const App: React.FC = () => {
               powerPreference: settings.quality === 'low' ? "low-power" : "high-performance",
               preserveDrawingBuffer: true
             }}
-            dpr={[1, settings.quality === 'ultra' ? 2 : 1.5]}
+            dpr={[0.8, settings.quality === 'ultra' ? 1.5 : 1.2]} // Reduced for better performance
           >
             <CameraManager />
             <SceneLighting />
@@ -210,9 +212,9 @@ const App: React.FC = () => {
           {showSeason && <SeasonPanel onBack={() => setShowSeason(false)} />}
 
           {(gameState === GameState.PLAYING || gameState === GameState.PAUSED || gameState === GameState.TUTORIAL || gameState === GameState.LEVEL_CLEAR) && (
-            <RealisticHUD
-              showInventory={() => setShowInventory(true)}
-              showCrafting={() => setShowCrafting(true)}
+            <PremiumHUD
+              onOpenInventory={() => setShowInventory(true)}
+              onOpenCrafting={() => setShowCrafting(true)}
             />
           )}
 

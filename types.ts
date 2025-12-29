@@ -116,6 +116,7 @@ export interface UserProfile {
   name: string;
   email: string;
   avatar: string; // URL or preset ID
+  bio?: string;
 }
 
 export interface LeaderboardEntry {
@@ -172,6 +173,8 @@ export interface BattleRecord {
   result: 'VICTORY' | 'DEFEAT' | 'DRAW';
   winnings: number; // Net gain/loss
   duration: number; // How long the battle lasted
+  kills?: number;
+  wave?: number;
 }
 
 export interface ArenaStats {

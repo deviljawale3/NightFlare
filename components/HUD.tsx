@@ -3,6 +3,7 @@ import { useGameStore } from '../store';
 import { TimeOfDay, GameState } from '../types';
 import ChatPanel from './ChatPanel';
 import SocialShare from './SocialShare';
+import Minimap from './Minimap';
 
 interface HUDProps {
   onOpenInventory: () => void;
@@ -122,12 +123,26 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+
+  const getThemeColor = () => {
+    if (wave % 5 === 0) return { r: 220, g: 20, b: 60, name: 'BLOOD MOON' }; // Red for Boss Waves
+    if (useGameStore.getState().timeOfDay === TimeOfDay.NIGHT) return { r: 147, g: 51, b: 234, name: 'VOID NIGHT' }; // Purple for Night
+    return { r: 249, g: 115, b: 22, name: 'DAYLIGHT' }; // Orange for Day
+  };
+
+  const theme = getThemeColor();
+  const themeStyle = {
+    borderColor: `rgba(${theme.r}, ${theme.g}, ${theme.b}, 0.25)`,
+    background: `linear-gradient(135deg, rgba(0,0,0,0.4), rgba(${theme.r},${theme.g},${theme.b}, 0.05))`,
+    boxShadow: `0 8px 32px 0 rgba(0, 0, 0, 0.3)`
+  };
+
   return (
     <div className="w-full h-full flex flex-col justify-between p-3 sm:p-8 select-none pointer-events-none font-['Outfit'] overflow-hidden relative">
 
       {/* CHAT OVERLAY */}
       {showChat && (
-        <div className="absolute top-24 left-4 z-50 w-[80vw] sm:w-96 h-64 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 pointer-events-auto flex flex-col shadow-2xl animate-in slide-in-from-left-4 duration-200">
+        <div className="absolute top-24 left-4 z-50 w-[80vw] sm:w-96 h-64 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 pointer-events-auto flex flex-col shadow-2xl animate-in slide-in-from-left-10 zoom-in-95 duration-500 ease-out">
           <div className="flex justify-between items-center p-2 border-b border-white/10 bg-white/5 rounded-t-2xl">
             <span className="text-[10px] font-black uppercase tracking-widest text-white/50 pl-2">Radio Comms</span>
             <button onClick={() => setShowChat(false)} className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white">✕</button>
@@ -142,7 +157,7 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
       <div className="flex justify-between items-start w-full relative h-24">
 
         {/* TOP LEFT: COMPACT HEALTH BARS */}
-        <div className="bg-black/40 backdrop-blur-xl p-3 sm:p-5 rounded-3xl border border-white/10 shadow-2xl pointer-events-auto min-w-[110px] sm:min-w-[200px]">
+        <div className="backdrop-blur-xl p-3 sm:p-5 rounded-3xl border shadow-2xl pointer-events-auto min-w-[110px] sm:min-w-[200px]" style={themeStyle}>
           <div className="space-y-2 sm:space-y-3">
             <div className="space-y-1">
               <div className="flex justify-between items-end">
@@ -202,8 +217,8 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
             </div>
           ) : (
             // NORMAL MODE UI
-            <div className="bg-black/50 backdrop-blur-md px-4 sm:px-10 py-2 sm:py-3 rounded-[2rem] border border-white/10 text-center shadow-2xl">
-              <div className="text-[8px] sm:text-[11px] font-black text-orange-500 uppercase tracking-[0.3em] italic mb-0.5 sm:mb-1 whitespace-nowrap">Survive Level {level}</div>
+            <div className="backdrop-blur-md px-4 sm:px-10 py-2 sm:py-3 rounded-[2rem] border text-center shadow-2xl" style={themeStyle}>
+              <div className="text-[8px] sm:text-[11px] font-black opacity-80 uppercase tracking-[0.3em] italic mb-0.5 sm:mb-1 whitespace-nowrap" style={{ color: `rgb(${theme.r},${theme.g},${theme.b})` }}>{theme.name} • WAVE {wave}</div>
               <div className="text-xl sm:text-4xl font-black text-white tracking-tighter tabular-nums leading-none">
                 {formatTime(levelTimer)}
               </div>
@@ -213,7 +228,7 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
 
         {/* TOP RIGHT: RESOURCES & PAUSE */}
         <div className="flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto">
-          <div className="bg-black/60 backdrop-blur-xl px-3 py-2 rounded-2xl border border-white/10 flex flex-wrap justify-end gap-x-4 gap-y-1 shadow-2xl max-w-[160px] sm:max-w-none">
+          <div className="backdrop-blur-xl px-3 py-2 rounded-2xl border flex flex-wrap justify-end gap-x-4 gap-y-1 shadow-2xl max-w-[160px] sm:max-w-none" style={themeStyle}>
             <div className="flex items-center gap-1.5">
               <span className="text-sm sm:text-2xl">🪵</span>
               <span className="text-xs sm:text-lg font-black text-white">{resources.wood}</span>
@@ -230,6 +245,11 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
               <span className="text-sm sm:text-2xl">✨</span>
               <span className="text-xs sm:text-lg font-black text-white">{resources.lightShards}</span>
             </div>
+          </div>
+
+          {/* MINIMAP */}
+          <div className="pointer-events-auto backdrop-blur-xl rounded-xl border border-white/10 shadow-2xl p-1 overflow-hidden">
+            <Minimap />
           </div>
 
           <div className="flex gap-2">

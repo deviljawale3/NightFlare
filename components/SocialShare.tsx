@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import DeeJayLabsLogo from './DeeJayLabsLogo';
+import YouTubeStreaming from './YouTubeStreaming';
 
 interface SocialShareProps {
     onClose: () => void;
@@ -16,6 +17,7 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
     const [recordTimer, setRecordTimer] = useState(0);
     const [isFlashing, setIsFlashing] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [showYouTube, setShowYouTube] = useState(false);
 
     const gameUrl = window.location.href;
     const shareText = stats
@@ -137,19 +139,28 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
     };
 
     const openLiveDashboard = (platform: 'youtube' | 'twitch' | 'facebook' | 'youtube_sub') => {
+        if (platform === 'youtube') {
+            setShowYouTube(true);
+            return;
+        }
+
         setIsConnecting(true);
         setTimeout(() => {
             let url = '';
             switch (platform) {
-                case 'youtube': url = 'https://studio.youtube.com/channel/UC/livestreaming'; break;
+                // Youtube handled by component now
                 case 'twitch': url = 'https://dashboard.twitch.tv/'; break;
                 case 'facebook': url = 'https://www.facebook.com/live/create/'; break;
                 case 'youtube_sub': url = 'https://www.youtube.com/@DeeJayLabs?sub_confirmation=1'; break;
             }
-            window.open(url, '_blank');
+            if (url) window.open(url, '_blank');
             setIsConnecting(false);
         }, 1500);
     };
+
+    if (showYouTube) {
+        return <YouTubeStreaming onClose={() => setShowYouTube(false)} />;
+    }
 
     return (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300" onClick={onClose}>

@@ -98,12 +98,6 @@ const RealisticHUD: React.FC<RealisticHUDProps> = ({ showInventory, showCrafting
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // Get player position from window global (set by Player component)
-    const playerPosition = (window as any).playerPos ? {
-        x: (window as any).playerPos.x,
-        z: (window as any).playerPos.z
-    } : undefined;
-
     return (
         <div className="fixed inset-0 pointer-events-none z-50 safe-padding">
 
@@ -116,7 +110,7 @@ const RealisticHUD: React.FC<RealisticHUDProps> = ({ showInventory, showCrafting
                 {/* Minimap */}
                 {showMap && (
                     <div className="relative animate-in slide-in-from-left-4 duration-300">
-                        <Minimap playerPosition={playerPosition} />
+                        <Minimap />
                         <button
                             onClick={() => setShowMap(false)}
                             className="absolute -top-1 -right-1 w-5 h-5 bg-black/80 rounded-full flex items-center justify-center text-white/60 hover:text-white text-xs border border-white/20 hover:bg-black transition-all"

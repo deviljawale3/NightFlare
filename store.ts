@@ -69,6 +69,7 @@ interface GameStore {
   chatMessages: import('./types').ChatMessage[];
   addChatMessage: (msg: Partial<import('./types').ChatMessage>) => void;
   grantRequest: (msgId: string) => void;
+  giftItem: (targetId: string, itemType: 'LIFE' | 'WOOD' | 'STONE' | 'SHARD', amount?: number) => boolean;
   giftLife: (targetId: string, fromChat?: boolean) => boolean;
   upgradeWeapon: (weapon: import('./types').WeaponType) => void;
   equipWeapon: (weapon: import('./types').WeaponType) => void;
@@ -143,7 +144,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     currentHealth: 100,
     attackDamage: 25,
     attackRange: 2.5,
-    speed: 7,
+    speed: 3.5,
     hasArmor: false,
     hasSpear: false,
     novaCharge: 0,
@@ -255,8 +256,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { lives, lastLifeRegen } = get();
     if (lives >= 3) return;
 
-    // 10 minutes = 600000 ms
-    const LIFE_REGEN_MS = 600000;
+    // 12 minutes = 720000 ms
+    const LIFE_REGEN_MS = 720000;
     const now = Date.now();
     const elapsed = now - lastLifeRegen;
 
@@ -265,6 +266,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const newLives = Math.min(3, lives + livesToGain);
 
       const remainder = elapsed % LIFE_REGEN_MS;
+      // If full, reset timer to now, else keep the progress
       const newRegenTime = newLives === 3 ? now : now - remainder;
 
       set({ lives: newLives, lastLifeRegen: newRegenTime });
@@ -280,6 +282,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const newLives = lives - 1;
       set({ lives: newLives });
       localStorage.setItem('nightflare_lives', newLives.toString());
+      // If we dropped below max, and weren't already regenerating, start timer
+      // Actually strictly: if we were at max, we start timer now.
       if (lives === 3) {
         const now = Date.now();
         set({ lastLifeRegen: now });
@@ -290,20 +294,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return false;
   },
 
-  giftLife: (targetId, fromChat = false) => {
-    const { userProfile, addChatMessage } = get();
-    console.log(`Sending life to ${targetId}`);
+  giftItem: (targetId: string, itemType: 'LIFE' | 'WOOD' | 'STONE' | 'SHARD', amount: number = 1) => {
+    const { userProfile, addChatMessage, resources, consumeResource, lives } = get();
 
-    if (fromChat) {
-      addChatMessage({
-        senderId: 'system',
-        senderName: 'System',
-        content: `${userProfile.name} gifted a Life directly to ${targetId}!`,
-        type: 'SYSTEM',
-        timestamp: Date.now()
-      });
+    // Check cost
+    if (itemType === 'LIFE') {
+      if (lives < 1) return false;
+      // consume life? Usually gifting life costs a life or a specialized item. 
+      // Let's assume it costs 500 shards to buy a gift life, or costs user's life.
+      // User request says "allow user to gift inventory". 
+      // Let's assume it costs shards to send a life gift.
+      if (resources.lightShards < 100) return false;
+      consumeResource('lightShards', 100);
+    } else if (itemType === 'WOOD') {
+      if (!consumeResource('wood', amount)) return false;
+    } else if (itemType === 'STONE') {
+      if (!consumeResource('stone', amount)) return false;
     }
-    return true; // Sent successfully
+
+    addChatMessage({
+      senderId: 'system',
+      senderName: 'System',
+      senderAvatar: '🎁',
+      content: `${userProfile.name} gifted ${amount} ${itemType} to ${targetId}!`,
+      type: 'SYSTEM',
+      timestamp: Date.now()
+    });
+    return true;
+  },
+
+  giftLife: (targetId, fromChat = false) => {
+    // Legacy wrapper
+    return get().giftItem(targetId, 'LIFE', 1);
   },
 
   addChatMessage: (msg) => set((state) => {
