@@ -1,8 +1,8 @@
-import React, { useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
+import React, { useRef, useMemo, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
-import { IslandTheme } from '../types';
+import { IslandTheme, NightEvent } from '../types';
 
 interface Particle {
     position: THREE.Vector3;
@@ -15,14 +15,31 @@ interface Particle {
 }
 
 const EnvironmentalEffects: React.FC = () => {
-    const { islandTheme } = useGameStore();
+    const { islandTheme, isTimeSlowed, currentNightEvent, weather } = useGameStore();
     const particlesRef = useRef<THREE.InstancedMesh>(null);
+    const starfallRef = useRef<THREE.InstancedMesh>(null);
     const particles = useRef<Particle[]>([]);
+    const starfallParticles = useRef<Particle[]>([]);
     const dummy = useMemo(() => new THREE.Object3D(), []);
+
+    // ION STORM STATE
+    const [lightningFlash, setLightningFlash] = useState(0);
+
+    // Weather Init
+    useMemo(() => {
+        starfallParticles.current = [];
+        for (let i = 0; i < 50; i++) {
+            starfallParticles.current.push({
+                position: new THREE.Vector3(Math.random() * 60 - 30, Math.random() * 40, Math.random() * 60 - 30),
+                velocity: new THREE.Vector3(0, -1.5 - Math.random(), 0),
+                rotation: 0, rotationSpeed: 0, life: 0, maxLife: 2, size: 0.3
+            });
+        }
+    }, [islandTheme]);
 
     // Detect mobile for performance
     const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-    const particleMultiplier = isMobile ? 0.5 : 1.0;
+    const particleMultiplier = isMobile ? 0.35 : 1.0;
 
     // Initialize particles based on theme
     useMemo(() => {
@@ -32,40 +49,68 @@ const EnvironmentalEffects: React.FC = () => {
 
         switch (islandTheme) {
             case IslandTheme.FOREST:
-                count = Math.floor(30 * particleMultiplier); // OPTIMIZED: Reduced from 50
-                config = { color: 0x4ade80, size: 0.3 };
+                count = Math.floor(60 * particleMultiplier);
+                config = { color: 0x4ade80, size: 0.15 };
+                break;
+            case IslandTheme.DESERT:
+                count = Math.floor(150 * particleMultiplier);
+                config = { color: 0xfde047, size: 0.1 };
                 break;
             case IslandTheme.VOLCANO:
-                count = Math.floor(40 * particleMultiplier); // OPTIMIZED: Reduced from 75
-                config = { color: 0x52525b, size: 0.2 };
+                count = Math.floor(100 * particleMultiplier);
+                config = { color: 0xff4400, size: 0.12 };
                 break;
             case IslandTheme.ARCTIC:
-                count = Math.floor(50 * particleMultiplier); // OPTIMIZED: Reduced from 100
-                config = { color: 0xffffff, size: 0.25 };
+                count = Math.floor(120 * particleMultiplier);
+                config = { color: 0xffffff, size: 0.18 };
+                break;
+            case IslandTheme.VOID:
+                count = Math.floor(80 * particleMultiplier);
+                config = { color: 0xa855f7, size: 0.2 };
+                break;
+            case IslandTheme.CELESTIAL:
+                count = Math.floor(200 * particleMultiplier);
+                config = { color: 0x00f2ff, size: 0.1 };
+                break;
+            case IslandTheme.CRYSTAL:
+                count = Math.floor(90 * particleMultiplier);
+                config = { color: 0xf0abfc, size: 0.25 };
+                break;
+            case IslandTheme.CORRUPTION:
+                count = Math.floor(110 * particleMultiplier);
+                config = { color: 0x84cc16, size: 0.14 };
+                break;
+            case IslandTheme.ABYSS:
+                count = Math.floor(130 * particleMultiplier);
+                config = { color: 0x4338ca, size: 0.12 };
+                break;
+            case IslandTheme.ETERNAL_SHADOW:
+                count = Math.floor(250 * particleMultiplier);
+                config = { color: 0xffffff, size: 0.08 };
                 break;
         }
 
         // Create particles
         for (let i = 0; i < count; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const radius = Math.random() * 40 + 10;
+            const radius = Math.random() * 45 + 5;
 
             particles.current.push({
                 position: new THREE.Vector3(
                     Math.cos(angle) * radius,
-                    Math.random() * 30 + 10,
+                    Math.random() * 25,
                     Math.sin(angle) * radius
                 ),
                 velocity: new THREE.Vector3(
-                    (Math.random() - 0.5) * 0.5,
-                    -Math.random() * 0.5 - 0.2,
-                    (Math.random() - 0.5) * 0.5
+                    (Math.random() - 0.5) * 0.4,
+                    -Math.random() * 0.3 - 0.1,
+                    (Math.random() - 0.5) * 0.4
                 ),
                 rotation: Math.random() * Math.PI * 2,
-                rotationSpeed: (Math.random() - 0.5) * 0.05,
+                rotationSpeed: (Math.random() - 0.5) * 0.08,
                 life: Math.random() * 10,
                 maxLife: 10,
-                size: config.size * (0.8 + Math.random() * 0.4)
+                size: config.size * (0.5 + Math.random() * 1.5)
             });
         }
     }, [islandTheme, particleMultiplier]);
@@ -74,89 +119,101 @@ const EnvironmentalEffects: React.FC = () => {
         if (!particlesRef.current) return;
 
         const playerPos = (window as any).playerPos || new THREE.Vector3(0, 0, 0);
+        const t = state.clock.getElapsedTime();
+
+        const isBlizzard = weather === 'BLIZZARD';
+        const isSandstorm = weather === 'SANDSTORM';
+        const isFog = weather === 'FOG';
 
         particles.current.forEach((particle, i) => {
-            // Update particle physics
             particle.life += delta;
 
-            // Different behavior per theme
+            const baseWindX = isBlizzard ? -4.5 : (isSandstorm ? -6.0 : 0);
+            const baseWindY = isBlizzard ? -1.5 : (isSandstorm ? 0.5 : 0);
+
             switch (islandTheme) {
                 case IslandTheme.FOREST:
-                    // Gentle falling with drift
-                    particle.velocity.y = -0.3;
-                    particle.velocity.x = Math.sin(particle.life) * 0.2;
-                    particle.rotation += particle.rotationSpeed;
+                    particle.velocity.y = -0.2 + baseWindY;
+                    particle.velocity.x = Math.sin(particle.life + i) * 0.15 + baseWindX;
                     break;
-
+                case IslandTheme.DESERT:
+                    particle.velocity.x = -1.5 + baseWindX;
+                    particle.velocity.y = (Math.random() - 0.5) * 0.2 + baseWindY;
+                    break;
                 case IslandTheme.VOLCANO:
-                    // Rising ash with drift
-                    particle.velocity.y = 0.2 + Math.sin(particle.life * 2) * 0.1;
-                    particle.velocity.x = (Math.random() - 0.5) * 0.3;
-                    particle.velocity.z = (Math.random() - 0.5) * 0.3;
+                    particle.velocity.y = 0.4 + Math.sin(t + i) * 0.2 + baseWindY;
+                    particle.velocity.x = Math.cos(t * 0.5 + i) * 0.2 + baseWindX;
                     break;
-
                 case IslandTheme.ARCTIC:
-                    // Snowfall with wind
-                    particle.velocity.y = -0.4;
-                    particle.velocity.x = Math.sin(particle.life * 0.5) * 0.3;
-                    particle.rotation += particle.rotationSpeed * 0.5;
+                    particle.velocity.y = -0.8 + baseWindY;
+                    particle.velocity.x = -1.2 + Math.sin(t * 0.5) * 0.5 + baseWindX;
                     break;
+                case IslandTheme.VOID:
+                    particle.velocity.y = Math.sin(t + i * 0.5) * 0.5 + baseWindY;
+                    particle.velocity.x = Math.cos(t + i * 0.5) * 0.5 + baseWindX;
+                    break;
+                default:
+                    particle.velocity.y = -0.5 + baseWindY;
+                    particle.velocity.x = baseWindX;
             }
 
-            // Update position
-            particle.position.add(particle.velocity.clone().multiplyScalar(delta * 10));
+            const spdMult = isTimeSlowed ? 0.2 : 1.0;
+            particle.position.add(particle.velocity.clone().multiplyScalar(delta * 8 * spdMult));
 
-            // Respawn if out of bounds or too old
-            if (particle.position.y < 0 || particle.life > particle.maxLife) {
+            if (particle.position.y < -2 || particle.position.y > 35 || particle.life > particle.maxLife) {
                 const angle = Math.random() * Math.PI * 2;
-                const radius = Math.random() * 40 + 10;
-
+                const radius = Math.random() * 50 + 5;
                 particle.position.set(
-                    playerPos.x + Math.cos(angle) * radius,
-                    islandTheme === IslandTheme.VOLCANO ? 0 : 30, // Ash starts low, others high
+                    playerPos.x + Math.cos(angle) * radius - (baseWindX * 5),
+                    islandTheme === IslandTheme.VOLCANO ? -1 : 32,
                     playerPos.z + Math.sin(angle) * radius
                 );
                 particle.life = 0;
             }
 
-            // Update instance matrix
             dummy.position.copy(particle.position);
-            dummy.rotation.z = particle.rotation;
-            dummy.scale.setScalar(particle.size);
+            dummy.rotation.set(particle.rotation, particle.rotation, particle.rotation);
+            dummy.scale.setScalar(particle.size * (isBlizzard || isSandstorm ? 2.5 : 1));
             dummy.updateMatrix();
             particlesRef.current!.setMatrixAt(i, dummy.matrix);
         });
 
         particlesRef.current.instanceMatrix.needsUpdate = true;
+
+        // WEATHER LOGIC
+        if (currentNightEvent === NightEvent.STARFALL && starfallRef.current) {
+            starfallParticles.current.forEach((p, i) => {
+                p.position.add(p.velocity);
+                if (p.position.y < 0) {
+                    p.position.set(playerPos.x + (Math.random() * 60 - 30), 40, playerPos.z + (Math.random() * 60 - 30));
+                }
+                dummy.position.copy(p.position);
+                dummy.rotation.set(0, 0, 0);
+                dummy.scale.setScalar(p.size);
+                dummy.updateMatrix();
+                starfallRef.current!.setMatrixAt(i, dummy.matrix);
+            });
+            starfallRef.current.instanceMatrix.needsUpdate = true;
+        }
+
+        if (currentNightEvent === NightEvent.ION_STORM || weather === 'STORM') {
+            if (Math.random() < 0.015) { // 1.5% chance per frame for lightning
+                setLightningFlash(1.0);
+            }
+        }
+
+        if (lightningFlash > 0) {
+            setLightningFlash(prev => Math.max(0, prev - delta * 4));
+        }
+
     });
 
-    // Get particle color and material based on theme
     const getParticleConfig = () => {
         switch (islandTheme) {
-            case IslandTheme.FOREST:
-                return {
-                    color: new THREE.Color(0x4ade80),
-                    opacity: 0.6,
-                    count: Math.floor(30 * particleMultiplier) // OPTIMIZED: Reduced from 50
-                };
-            case IslandTheme.VOLCANO:
-                return {
-                    color: new THREE.Color(0x52525b),
-                    opacity: 0.4,
-                    count: Math.floor(40 * particleMultiplier) // OPTIMIZED: Reduced from 75
-                };
-            case IslandTheme.ARCTIC:
-                return {
-                    color: new THREE.Color(0xffffff),
-                    opacity: 0.7,
-                    count: Math.floor(50 * particleMultiplier) // OPTIMIZED: Reduced from 100
-                };
-            default:
-                return {
-                    color: new THREE.Color(0xffffff),
-                    opacity: 0.5,
-                    count: 30 // OPTIMIZED: Reduced from 50
-                };
+            case IslandTheme.FOREST: return { color: 0x4ade80, opacity: 0.8, count: Math.floor(60 * particleMultiplier) };
+            case IslandTheme.VOLCANO: return { color: 0xff4400, opacity: 0.9, count: Math.floor(100 * particleMultiplier) };
+            case IslandTheme.ARCTIC: return { color: 0xffffff, opacity: 0.9, count: Math.floor(120 * particleMultiplier) };
+            default: return { color: 0xffffff, opacity: 0.5, count: 60 };
         }
     };
 
@@ -164,42 +221,40 @@ const EnvironmentalEffects: React.FC = () => {
 
     return (
         <group>
-            {/* Particle System */}
-            <instancedMesh
-                ref={particlesRef}
-                args={[undefined, undefined, config.count]}
-                frustumCulled={false}
-            >
-                {/* Particle geometry - small plane for leaves/snow, sphere for ash */}
-                {islandTheme === IslandTheme.VOLCANO ? (
-                    <sphereGeometry args={[0.1, 4, 4]} />
-                ) : (
-                    <planeGeometry args={[0.3, 0.3]} />
-                )}
-
-                {/* Particle material */}
-                <meshBasicMaterial
-                    color={config.color}
+            <instancedMesh ref={particlesRef} args={[undefined, undefined, config.count]} frustumCulled={false}>
+                <dodecahedronGeometry args={[0.2, 0]} />
+                <meshStandardMaterial
+                    color={isTimeSlowed ? 0x00ffff : config.color}
                     transparent
                     opacity={config.opacity}
-                    side={THREE.DoubleSide}
+                    emissive={isTimeSlowed ? 0x00ffff : config.color}
+                    emissiveIntensity={isTimeSlowed ? 40 : (islandTheme === IslandTheme.VOLCANO ? 10 : 2)}
                     depthWrite={false}
                 />
             </instancedMesh>
 
-            {/* Ambient lighting enhancement per theme */}
-            {islandTheme === IslandTheme.FOREST && (
-                <ambientLight intensity={0.1} color="#4ade80" />
+            {/* STARFALL MESH */}
+            {currentNightEvent === NightEvent.STARFALL && (
+                <instancedMesh ref={starfallRef} args={[undefined, undefined, 50]} frustumCulled={false}>
+                    <coneGeometry args={[0.2, 1, 8]} />
+                    <meshBasicMaterial color="#ffff00" />
+                </instancedMesh>
             )}
-            {islandTheme === IslandTheme.VOLCANO && (
-                <>
-                    <ambientLight intensity={0.15} color="#f97316" />
-                    <pointLight position={[0, 5, 0]} intensity={0.3} distance={50} color="#dc2626" />
-                </>
+
+            {/* ION STORM FLASH */}
+            {lightningFlash > 0 && (
+                <mesh position={(window as any).playerPos || [0, 0, 0]}>
+                    <sphereGeometry args={[50, 16, 16]} />
+                    <meshBasicMaterial color="white" transparent opacity={lightningFlash * 0.3} side={THREE.BackSide} />
+                </mesh>
             )}
-            {islandTheme === IslandTheme.ARCTIC && (
-                <ambientLight intensity={0.1} color="#67e8f9" />
-            )}
+            {/* Dynamic Atmospheric Light Pulses */}
+            <pointLight
+                position={[0, 15, 0]}
+                intensity={islandTheme === IslandTheme.VOLCANO ? (2 + Math.sin(Date.now() * 0.002) * 1.5) : 0.5}
+                color={islandTheme === IslandTheme.VOLCANO ? "#ff4400" : (islandTheme === IslandTheme.ARCTIC ? "#00ffff" : "#4ade80")}
+                distance={100}
+            />
         </group>
     );
 };

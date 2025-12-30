@@ -4,23 +4,30 @@ import React from 'react';
 const OrientationToggle: React.FC<{ className?: string }> = ({ className }) => {
     const toggleOrientation = async () => {
         try {
+            // Check if API exists
+            if (!screen.orientation || !(screen.orientation as any).lock) {
+                alert("Auto-rotation is managed by your device settings. Please enable Auto-Rotate in your control panel for the best experience.");
+                return;
+            }
+
             // For mobile, we often need fullscreen to lock orientation
             if (!document.fullscreenElement) {
                 await document.documentElement.requestFullscreen().catch(() => { });
             }
 
             // Screen Orientation API
-            if (typeof screen !== 'undefined' && 'orientation' in screen && (screen.orientation as any).lock) {
-                // Toggle between portrait and landscape or just force landscape
-                const type = (screen.orientation as any).type;
-                if (type.includes('portrait')) {
-                    await (screen.orientation as any).lock('landscape').catch(() => { });
-                } else {
-                    await (screen.orientation as any).lock('portrait').catch(() => { });
-                }
+            const type = (screen.orientation as any).type || '';
+            if (type.includes('portrait')) {
+                await (screen.orientation as any).lock('landscape').catch((e: any) => {
+                    console.warn("Lock failed", e);
+                    alert("Please rotate your phone to Landscape mode manually.");
+                });
+            } else {
+                await (screen.orientation as any).lock('portrait').catch(() => { });
             }
         } catch (err) {
             console.warn("Orientation lock effort failed:", err);
+            alert("Please enable Auto-Rotate in your device settings.");
         }
     };
 

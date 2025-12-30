@@ -28,6 +28,13 @@ import ErrorBoundary from './components/ErrorBoundary';
 import SoundEffects from './components/SoundEffects';
 import HapticFeedback from './components/HapticFeedback';
 import ScreenEffects from './components/ScreenEffects';
+import ConstellationMenu from './components/ConstellationMenu';
+import NexusShop from './components/NexusShop';
+import OrientationLock from './components/OrientationLock';
+import BestiaryMenu from './components/BestiaryMenu';
+import ClassSelection from './components/ClassSelection';
+import OperationsPanel from './components/OperationsPanel';
+import VanguardMusic from './components/VanguardMusic';
 
 const SceneLighting: React.FC = () => {
   const timeOfDay = useGameStore(s => s.timeOfDay);
@@ -36,22 +43,37 @@ const SceneLighting: React.FC = () => {
   const directionalRef = useRef<THREE.DirectionalLight>(null);
   const fogRef = useRef<THREE.Fog>(null);
 
+  const currentNightEvent = useGameStore(s => s.currentNightEvent);
+
   useFrame((_, delta) => {
     const isNight = timeOfDay === TimeOfDay.NIGHT;
     const isMenu = gameState === GameState.MAIN_MENU;
     const isTutorial = gameState === GameState.TUTORIAL;
 
-    const targetAmbient = isMenu ? 0.65 : (isNight ? 0.45 : 0.8);
-    const targetDirIntensity = isMenu ? 1.5 : (isNight ? 0.7 : 1.8);
-    const targetFogColor = new THREE.Color(isNight && !isMenu ? '#0a0a0a' : '#1a2e35');
+    let targetAmbient = isMenu ? 0.65 : (isNight ? 0.45 : 0.8);
+    let targetDirIntensity = isMenu ? 1.5 : (isNight ? 0.7 : 1.8);
+    let targetFogColor = new THREE.Color(isNight && !isMenu ? '#0a0a0a' : '#1a2e35');
+    let targetFogNear = isNight ? 18 : 25;
+    let targetFogFar = isNight ? 65 : 80;
+
+    // Weather Overrides
+    if (isNight && currentNightEvent === 'DENSE_FOG') {
+      targetFogNear = 2;
+      targetFogFar = 16;
+      targetFogColor = new THREE.Color('#050505');
+      targetAmbient = 0.2;
+    } else if (isNight && currentNightEvent === 'ION_STORM') {
+      targetFogColor = new THREE.Color('#1a0b2e'); // Deep violet
+      targetAmbient = 0.3;
+    }
 
     if (ambientRef.current) ambientRef.current.intensity = THREE.MathUtils.lerp(ambientRef.current.intensity, targetAmbient, delta * (isMenu || isTutorial ? 3 : 0.5));
     if (directionalRef.current) directionalRef.current.intensity = THREE.MathUtils.lerp(directionalRef.current.intensity, targetDirIntensity, delta * (isMenu || isTutorial ? 3 : 0.5));
 
     if (fogRef.current) {
       fogRef.current.color.lerp(targetFogColor, delta * 0.5);
-      fogRef.current.near = THREE.MathUtils.lerp(fogRef.current.near, isNight ? 18 : 25, delta * 0.5);
-      fogRef.current.far = THREE.MathUtils.lerp(fogRef.current.far, isNight ? 65 : 80, delta * 0.5);
+      fogRef.current.near = THREE.MathUtils.lerp(fogRef.current.near, targetFogNear, delta * 0.5);
+      fogRef.current.far = THREE.MathUtils.lerp(fogRef.current.far, targetFogFar, delta * 0.5);
     }
   });
 
@@ -108,21 +130,34 @@ const CameraManager: React.FC = () => {
     } else {
       switch (settings.cameraPreset) {
         case 'CLOSE': offset.set(0, 1.8, 3.5); targetFov = 65; break;
-        case 'TOP_DOWN': offset.set(0, 22, 0); targetFov = 35; break;
-        case 'SIDE': offset.set(12, 3, 0); targetFov = 50; break;
-        case 'ISOMETRIC': offset.set(8, 8, 8); targetFov = 45; break;
-        default: offset.set(0, 6, 9); targetFov = 55; break; // Master Action Perspective
+        case 'TOP_DOWN': offset.set(0, 25, 0); targetFov = 30; break;
+        case 'SIDE': offset.set(15, 4, 0); targetFov = 45; break;
+        case 'ISOMETRIC': offset.set(12, 10, 12); targetFov = 40; break;
+        default: offset.set(0, 8, 11); targetFov = 50; break; // OPTIMIZED: Slightly higher and further for better tactical view
       }
     }
 
-    // 3. SNAPPY APPLICATION (Pro Response)
+    // 4. TRANSITION EFFECTS (The Dramatic Polish)
+    const isTransitioning = useGameStore.getState().isTransitioning;
+    if (isTransitioning) {
+      const time = performance.now() * 0.001;
+      const orbitRadius = 10;
+      offset.set(
+        Math.sin(time) * orbitRadius,
+        4,
+        Math.cos(time) * orbitRadius
+      );
+      targetFov = 40;
+    }
+
+    // 5. SNAPPY APPLICATION (Pro Response)
     const targetPos = playerPos.clone().add(offset);
-    camera.position.lerp(targetPos, 0.15);
+    camera.position.lerp(targetPos, isTransitioning ? 0.05 : 0.15);
 
     lookAtTarget.current.lerp(playerPos, 0.2);
     camera.lookAt(lookAtTarget.current);
 
-    // 4. Hard Matrix Sync
+    // 6. Hard Matrix Sync
     if (camera instanceof THREE.PerspectiveCamera && camera.fov !== targetFov) {
       camera.fov = targetFov;
       camera.updateProjectionMatrix();
@@ -130,6 +165,27 @@ const CameraManager: React.FC = () => {
   });
 
   return null;
+};
+
+const TransitionOverlay: React.FC = () => {
+  const isTransitioning = useGameStore(s => s.isTransitioning);
+  return (
+    <div className={`fixed inset-0 z-[200] pointer-events-none transition-all duration-700 bg-black ${isTransitioning ? 'opacity-100' : 'opacity-0'}`}>
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black" />
+    </div>
+  );
+};
+
+const AppOverlay: React.FC = () => {
+  return (
+    <div className="fixed inset-0 z-[150] pointer-events-none overflow-hidden">
+      {/* Cinematic Vignette */}
+      <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] sm:shadow-[inset_0_0_200px_rgba(0,0,0,0.9)]" />
+      {/* Scanline Effect */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20" />
+    </div>
+  );
 };
 
 const App: React.FC = () => {
@@ -150,6 +206,11 @@ const App: React.FC = () => {
   const [showFriends, setShowFriends] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [showSeason, setShowSeason] = useState(false);
+  const [showConstellation, setShowConstellation] = useState(false);
+  const [showNexus, setShowNexus] = useState(false);
+  const [showBestiary, setShowBestiary] = useState(false);
+  const [showClassSelection, setShowClassSelection] = useState(false);
+  const [showOperations, setShowOperations] = useState(false);
 
   useEffect(() => {
     initializeAchievements();
@@ -182,13 +243,17 @@ const App: React.FC = () => {
     transform: `translate(${(Math.random() - 0.5) * screenShake * 50}px, ${(Math.random() - 0.5) * screenShake * 50}px)`
   } : {};
 
-  const isModalOpen = showTournament || showFriends || showAnalytics || showSeason || settings.isOpen;
+  const isModalOpen = showTournament || showFriends || showAnalytics || showSeason || settings.isOpen || showNexus || showConstellation || showBestiary || showClassSelection || showOperations;
 
   return (
     <ErrorBoundary>
-      <div className="fixed inset-0 w-full h-[100dvh] bg-[#050505] overflow-hidden select-none safe-padding">
+      <div style={shakeStyle} className="fixed inset-0 w-full h-[100dvh] bg-[#050505] overflow-hidden select-none safe-padding">
+        <VanguardMusic />
+        <OrientationLock />
         <SoundEffects />
         <HapticFeedback />
+        <TransitionOverlay />
+        <AppOverlay />
         {(gameState === GameState.PLAYING || gameState === GameState.TUTORIAL) && <ScreenEffects />}
 
         {isLoading && <LoadingScreen onComplete={() => setIsLoading(false)} />}
@@ -233,18 +298,30 @@ const App: React.FC = () => {
                 showFriends={() => setShowFriends(true)}
                 showAnalytics={() => setShowAnalytics(true)}
                 showSeason={() => setShowSeason(true)}
+                showNexus={() => setShowNexus(true)}
+                showBestiary={() => setShowBestiary(true)}
+                showClassSelection={() => setShowClassSelection(true)}
+                showOperations={() => setShowOperations(true)}
               />
             )}
+
+            {showClassSelection && <ClassSelection onSelect={() => setShowClassSelection(false)} />}
 
             {showTournament && <TournamentHub onBack={() => setShowTournament(false)} />}
             {showFriends && <FriendsPanel onBack={() => setShowFriends(false)} />}
             {showAnalytics && <AnalyticsDashboard onBack={() => setShowAnalytics(false)} />}
             {showSeason && <SeasonPanel onBack={() => setShowSeason(false)} />}
+            {showConstellation && <ConstellationMenu onClose={() => setShowConstellation(false)} />}
+            {showNexus && <NexusShop onClose={() => setShowNexus(false)} />}
+            {showBestiary && <BestiaryMenu onClose={() => setShowBestiary(false)} />}
+            {showOperations && <OperationsPanel onBack={() => setShowOperations(false)} />}
 
             {(gameState === GameState.PLAYING || gameState === GameState.PAUSED || gameState === GameState.TUTORIAL || gameState === GameState.LEVEL_CLEAR) && (
               <PremiumHUD
                 onOpenInventory={() => setShowInventory(true)}
                 onOpenCrafting={() => setShowCrafting(true)}
+                onOpenConstellation={() => setShowConstellation(true)}
+                onOpenOperations={() => setShowOperations(true)}
               />
             )}
 

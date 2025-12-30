@@ -43,8 +43,8 @@ const PremiumAttackButton: React.FC<PremiumAttackButtonProps> = ({ onAttack, coo
         <div className="fixed bottom-6 right-6 z-50 pointer-events-auto md:hidden">
             {/* Attack Button */}
             <button
-                className={`w-24 h-24 rounded-full bg-gradient-to-br from-red-500/30 to-orange-500/30 backdrop-blur-xl border-2 shadow-[0_8px_32px_rgba(239,68,68,0.4)] transition-all duration-200 relative overflow-hidden group ${isPressed ? 'scale-95' : 'scale-100'
-                    } ${isOnCooldown ? 'border-gray-500/40 opacity-50' : 'border-red-500/40'
+                className={`w-24 h-24 rounded-full bg-gradient-to-br from-red-600/40 to-orange-600/40 backdrop-blur-2xl border-[3px] shadow-[0_8px_32px_rgba(220,38,38,0.5),inset_0_1px_1px_rgba(255,255,255,0.2)] transition-all duration-150 relative overflow-hidden group ${isPressed ? 'scale-90 border-red-400/50' : 'scale-100 border-red-500/30 hover:scale-105'
+                    } ${isOnCooldown ? 'border-gray-500/40 opacity-50 grayscale' : ''
                     }`}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
@@ -54,8 +54,8 @@ const PremiumAttackButton: React.FC<PremiumAttackButtonProps> = ({ onAttack, coo
                 disabled={isOnCooldown}
                 style={{
                     boxShadow: isPressed && !isOnCooldown
-                        ? '0 4px 20px rgba(239,68,68,0.6), 0 0 40px rgba(239,68,68,0.4)'
-                        : '0 8px 32px rgba(239,68,68,0.4)'
+                        ? '0 0 15px rgba(239,68,68,0.5), inset 0 0 20px rgba(0,0,0,0.5)'
+                        : '0 10px 40px -10px rgba(220,38,38,0.6), inset 0 1px 1px rgba(255,255,255,0.1)'
                 }}
             >
                 {/* Pulse Effect */}

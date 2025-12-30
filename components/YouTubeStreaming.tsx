@@ -347,15 +347,16 @@ const YouTubeStreaming: React.FC<YouTubeStreamingProps> = ({ onClose }) => {
                             {!CLIENT_ID ? (
                                 <div className="bg-yellow-900/10 border border-yellow-500/20 rounded-2xl p-6 max-w-2xl text-left backdrop-blur-sm">
                                     <h4 className="text-yellow-400 font-black uppercase text-xs tracking-wider mb-4 flex items-center gap-2">
-                                        <span>⚠️</span> Configuration Missing
+                                        <span>⚠️</span> YouTube API Configuration Needed
                                     </h4>
-                                    <div className="text-white/70 text-sm space-y-2 font-mono text-[11px]">
-                                        <p>Please configure your environment variables:</p>
+                                    <div className="text-white/70 text-sm space-y-4 font-mono text-[11px]">
+                                        <p>To enable direct YouTube integration, you must set up a Google Cloud Project with the YouTube Data API enabled.</p>
                                         <div className="bg-black/40 rounded-lg p-4 border border-white/5 space-y-1">
                                             <div>VITE_YOUTUBE_CLIENT_ID</div>
                                             <div>VITE_YOUTUBE_CLIENT_SECRET</div>
                                             <div>VITE_YOUTUBE_REDIRECT_URI</div>
                                         </div>
+                                        <p className="text-cyan-400 border-t border-white/5 pt-2 italic">Ref: See setup instructions at console.cloud.google.com</p>
                                     </div>
                                 </div>
                             ) : (

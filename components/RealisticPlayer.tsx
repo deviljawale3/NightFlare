@@ -3,6 +3,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore } from '../store';
 import { GameState } from '../types';
+import DroneController from './DroneController';
+import { soundEffects } from '../utils/soundEffects';
 
 const RealisticPlayer: React.FC = () => {
     const groupRef = useRef<THREE.Group>(null);
@@ -19,11 +21,16 @@ const RealisticPlayer: React.FC = () => {
     const [isDamaged, setIsDamaged] = useState(false);
     const [verticalVelocity, setVerticalVelocity] = useState(0);
     const [isGrounded, setIsGrounded] = useState(true);
+    const [isDashing, setIsDashing] = useState(false);
+    const [dashCooldown, setDashCooldown] = useState(0);
+    const [trails, setTrails] = useState<{ id: number; pos: THREE.Vector3; rot: number; opacity: number }[]>([]);
+    const dashVelocity = useRef(new THREE.Vector3());
 
     const gameState = useGameStore(s => s.gameState);
     const playerStats = useGameStore(s => s.playerStats);
     const triggerScreenShake = useGameStore(s => s.triggerScreenShake);
     const setPlayerGrounded = useGameStore(s => s.setPlayerGrounded);
+    const isTimeSlowed = useGameStore(s => s.isTimeSlowed);
 
     const keys = useRef<{ [key: string]: boolean }>({});
     const animationTimer = useRef(0);
@@ -43,8 +50,10 @@ const RealisticPlayer: React.FC = () => {
                     window.dispatchEvent(new CustomEvent('player-attack-hitbox', {
                         detail: {
                             position: groupRef.current!.position.clone(),
+                            rotation: groupRef.current!.rotation.y, // Needed for Arc/Line attacks
                             range: playerStats.attackRange + 1.8,
-                            damage: playerStats.attackDamage
+                            damage: playerStats.attackDamage,
+                            weaponType: playerStats.currentWeapon
                         }
                     }));
                 }, 150);
@@ -54,12 +63,34 @@ const RealisticPlayer: React.FC = () => {
         }
     };
 
+    const handleDash = () => {
+        if (!isDashing && dashCooldown <= 0 && isGrounded && !isAttacking) {
+            setIsDashing(true);
+            setDashCooldown(1.5); // 1.5s cooldown
+
+            // Move in current forward direction or input direction
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(groupRef.current!.quaternion);
+            dashVelocity.current.copy(forward.multiplyScalar(0.8)); // Strong burst
+
+            soundEffects.play('player_roll'); // Use roll sound for dash
+            triggerScreenShake(0.4);
+
+            window.dispatchEvent(new CustomEvent('player-dash-start'));
+            setTimeout(() => {
+                setIsDashing(false);
+                window.dispatchEvent(new CustomEvent('player-dash-end'));
+            }, 300);
+        }
+    };
+
     useFrame((state, delta) => {
         if (!groupRef.current) return;
         if (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) return;
 
-        // 1. ADVANCED MOVEMENT ENGINE
-        let moveSpeed = playerStats.speed * delta * 1.5;
+        const t = state.clock.getElapsedTime();
+        // 1. ADVANCED MOVEMENT ENGINE (Framerate Independent - TACTICAL TUNING)
+        const frameFactor = Math.min(0.1, delta); // Cap delta to avoid jumps
+        let moveSpeed = playerStats.speed * 20; // REDUCED from 30 for much better control
         let mX = (window as any).joystickX || 0;
         let mZ = (window as any).joystickY || 0;
 
@@ -70,56 +101,127 @@ const RealisticPlayer: React.FC = () => {
             if (keys.current['KeyD'] || keys.current['ArrowRight']) mX += 1;
         }
 
+        // Auto-dash if joystick is pushed far
+        const joyMagnitude = Math.sqrt(mX * mX + mZ * mZ);
+        if (joyMagnitude > 0.99 && !isDashing && dashCooldown <= 0) {
+            handleDash();
+            // Tactical Haptic Pulse on Dash Threshold
+            if (useGameStore.getState().settings.vibrationEnabled && 'vibrate' in navigator) {
+                navigator.vibrate(30);
+            }
+        }
+
         const isMoving = mX !== 0 || mZ !== 0;
 
         if (isMoving) {
             const length = Math.sqrt(mX * mX + mZ * mZ);
             mX /= length; mZ /= length;
-            velocity.current.x = THREE.MathUtils.lerp(velocity.current.x, mX * moveSpeed, 0.2);
-            velocity.current.z = THREE.MathUtils.lerp(velocity.current.z, mZ * moveSpeed, 0.2);
+
+            // Accelerate towards target velocity
+            const targetVX = mX * moveSpeed * delta;
+            const targetVZ = mZ * moveSpeed * delta;
+            velocity.current.x = THREE.MathUtils.lerp(velocity.current.x, targetVX, 1 - Math.pow(0.0001, delta)); // Even smoother lerp
+            velocity.current.z = THREE.MathUtils.lerp(velocity.current.z, targetVZ, 1 - Math.pow(0.0001, delta));
+
             const targetHeading = Math.atan2(mX, mZ);
             let rotDiff = targetHeading - groupRef.current.rotation.y;
             while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
             while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
-            groupRef.current.rotation.y += rotDiff * 0.25;
+            groupRef.current.rotation.y += rotDiff * (1 - Math.pow(0.00005, delta)); // Smoother rotation
         } else {
-            velocity.current.x *= 0.85;
-            velocity.current.z *= 0.85;
+            // High friction for precise stop (PREMIUIM BRAKING)
+            const friction = Math.pow(0.00001, delta); // Even more stopping power
+            velocity.current.x *= friction;
+            velocity.current.z *= friction;
+        }
+
+        // Constant Interaction check while harvesting
+        if (isHarvesting && t % 0.15 < 0.016) {
+            window.dispatchEvent(new CustomEvent('player-interact-check', {
+                detail: {
+                    position: groupRef.current.position.clone(),
+                    range: 3.5 // Interaction range
+                }
+            }));
+        }
+
+        // Apply Dash
+        if (isDashing) {
+            velocity.current.add(dashVelocity.current.clone().multiplyScalar(delta * 60));
+            dashVelocity.current.multiplyScalar(Math.pow(0.2, delta)); // Rapid decay
         }
 
         groupRef.current.position.x += velocity.current.x;
         groupRef.current.position.z += velocity.current.z;
 
-        // 2. CONNECTED CHARACTER ANIMATIONS
-        const t = state.clock.getElapsedTime();
-        const speed = velocity.current.length() * 60;
+        if (dashCooldown > 0) setDashCooldown(prev => Math.max(0, prev - delta));
+
+        // 2. CONNECTED CHARACTER ANIMATIONS - REFINED ATTACK LOGIC
+
+        const speedSq = velocity.current.x ** 2 + velocity.current.z ** 2;
+        const speed = Math.sqrt(speedSq) * 60;
+
+        // PREMIUM: Motion Blur Stretch
+        const stretch = 1 + (speed / 15);
+        bodyRef.current!.scale.set(1 / Math.sqrt(stretch), stretch, 1 / Math.sqrt(stretch));
 
         if (speed > 0.1 && isGrounded) {
             // Natural Running Bounce
-            const walkTime = t * 14;
-            lLegGroup.current!.rotation.x = Math.sin(walkTime) * 0.7;
-            rLegGroup.current!.rotation.x = Math.sin(walkTime + Math.PI) * 0.7;
-            lArmGroup.current!.rotation.x = Math.sin(walkTime + Math.PI) * 0.5;
-            if (!isAttacking) rArmGroup.current!.rotation.x = Math.sin(walkTime) * 0.5;
+            const walkTime = t * (isDashing ? 22 : 14);
+            const amplitude = isDashing ? 1.0 : 0.7;
+            lLegGroup.current!.rotation.x = Math.sin(walkTime) * amplitude;
+            rLegGroup.current!.rotation.x = Math.sin(walkTime + Math.PI) * amplitude;
+            lArmGroup.current!.rotation.x = Math.sin(walkTime + Math.PI) * amplitude * 0.7;
+            if (!isAttacking) rArmGroup.current!.rotation.x = Math.sin(walkTime) * amplitude * 0.7;
 
             bodyRef.current!.rotation.z = Math.sin(walkTime) * 0.08;
             bodyRef.current!.position.y = Math.abs(Math.sin(walkTime * 2)) * 0.08;
+
+            // Camera Tilt based on movement
+            state.camera.rotation.z = THREE.MathUtils.lerp(state.camera.rotation.z, -mX * 0.02, 0.1);
         } else {
             // Breathing Idle
             const breathe = Math.sin(t * 1.5);
             bodyRef.current!.position.y = breathe * 0.02;
             lArmGroup.current!.rotation.z = -0.15 + breathe * 0.05;
             rArmGroup.current!.rotation.z = 0.15 - breathe * 0.05;
-            lLegGroup.current!.rotation.x = 0;
-            rLegGroup.current!.rotation.x = 0;
+            lLegGroup.current!.rotation.x = THREE.MathUtils.lerp(lLegGroup.current!.rotation.x, 0, 0.1);
+            rLegGroup.current!.rotation.x = THREE.MathUtils.lerp(rLegGroup.current!.rotation.x, 0, 0.1);
+            state.camera.rotation.z = THREE.MathUtils.lerp(state.camera.rotation.z, 0, 0.1);
         }
 
-        // Action States
+        // Action States: REFINED 3-STAGE ATTACK
         if (isAttacking) {
-            const p = animationTimer.current / 0.5;
-            rArmGroup.current!.rotation.x = -Math.PI * 0.9 * Math.sin(p * Math.PI);
-            rArmGroup.current!.rotation.z = -0.6 * Math.sin(p * Math.PI);
+            const attackDuration = 0.5;
+            const p = Math.min(1, animationTimer.current / attackDuration);
+
+            // 3-Stage Rotation Physics
+            if (p < 0.25) { // Stage 1: Windup (Shoulder pull back)
+                const wp = p / 0.25;
+                rArmGroup.current!.rotation.x = THREE.MathUtils.lerp(0, 0.8, wp);
+                rArmGroup.current!.rotation.z = THREE.MathUtils.lerp(0.15, 0.5, wp);
+                bodyRef.current!.rotation.y = THREE.MathUtils.lerp(0, -0.2, wp);
+            }
+            else if (p < 0.45) { // Stage 2: Strike (Flash forward)
+                const sp = (p - 0.25) / 0.2;
+                rArmGroup.current!.rotation.x = THREE.MathUtils.lerp(0.8, -Math.PI * 0.85, sp);
+                rArmGroup.current!.rotation.z = THREE.MathUtils.lerp(0.5, -0.6, sp);
+                bodyRef.current!.rotation.y = THREE.MathUtils.lerp(-0.2, 0.3, sp);
+            }
+            else { // Stage 3: Recovery (Braking and return)
+                const rp = (p - 0.45) / 0.55;
+                rArmGroup.current!.rotation.x = THREE.MathUtils.lerp(-Math.PI * 0.85, 0, rp);
+                rArmGroup.current!.rotation.z = THREE.MathUtils.lerp(-0.6, 0.15, rp);
+                bodyRef.current!.rotation.y = THREE.MathUtils.lerp(0.3, 0, rp);
+            }
+
             animationTimer.current += delta;
+
+            // PREMIUM: FOV Pulse for impact
+            if (p > 0.25 && p < 0.45 && state.camera instanceof THREE.PerspectiveCamera) {
+                state.camera.fov = THREE.MathUtils.lerp(state.camera.fov, state.camera.fov - 4, 0.4);
+                state.camera.updateProjectionMatrix();
+            }
         }
 
         if (isHarvesting) {
@@ -138,7 +240,30 @@ const RealisticPlayer: React.FC = () => {
                 setVerticalVelocity(0);
                 setIsGrounded(true);
                 setPlayerGrounded(true);
+                triggerScreenShake(0.8);
+                soundEffects.play('land');
+                // Squat impact animation
+                bodyRef.current!.position.y = -0.3;
             }
+        }
+
+        // HIT-STOP & CHRONO-STASIS ENGINE
+        const hitStopActive = state.clock.getElapsedTime() < (window as any).hitStopTime;
+        if (hitStopActive && !isTimeSlowed) return; // Player is immune to stasis during Nova
+
+        // TRAIL LOGIC: Generate ghosts during dash or high speed
+        if (isDashing || speed > 15) {
+            if (state.clock.getElapsedTime() % 0.05 < 0.016) {
+                setTrails(prev => [...prev.slice(-8), {
+                    id: Date.now(),
+                    pos: groupRef.current!.position.clone(),
+                    rot: groupRef.current!.rotation.y,
+                    opacity: 0.5
+                }]);
+            }
+        }
+        if (trails.length > 0) {
+            setTrails(prev => prev.map(t => ({ ...t, opacity: t.opacity - delta * 2 })).filter(t => t.opacity > 0));
         }
 
         (window as any).playerPos = groupRef.current.position.clone();
@@ -147,7 +272,8 @@ const RealisticPlayer: React.FC = () => {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             keys.current[e.code] = true;
-            if (e.code === 'Space') if (isGrounded) { setVerticalVelocity(0.4); setIsGrounded(false); setPlayerGrounded(false); }
+            if (e.code === 'Space') if (isGrounded) { setVerticalVelocity(0.4); setIsGrounded(false); setPlayerGrounded(false); soundEffects.play('jump'); }
+            if (e.code === 'ShiftLeft' || e.code === 'KeyQ') handleDash();
             if (e.code === 'KeyF' || e.code === 'Enter') handleAttack();
             if (e.code === 'KeyE') setIsHarvesting(true);
         };
@@ -173,6 +299,15 @@ const RealisticPlayer: React.FC = () => {
 
     return (
         <group ref={groupRef}>
+            {/* RENDER GHOST TRAILS */}
+            {trails.map(t => (
+                <group key={t.id} position={t.pos} rotation={[0, t.rot, 0]}>
+                    <mesh position={[0, 1.1, 0]}>
+                        <capsuleGeometry args={[0.2, 0.45, 4, 8]} />
+                        <meshBasicMaterial color="#00ffff" transparent opacity={t.opacity * 0.2} />
+                    </mesh>
+                </group>
+            ))}
             {/* SOFT CIRCLE SHADOW */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
                 <circleGeometry args={[0.5, 32]} />
@@ -298,12 +433,35 @@ const RealisticPlayer: React.FC = () => {
                 </group>
             </group>
 
-            {/* ACTION VFX: Slash */}
+            {/* ACTION VFX: HIGH-FIDELITY SLASH ARC */}
             {isAttacking && (
-                <mesh position={[0, 1.2, 0.8]} rotation={[0, 0, Math.PI / 4]}>
-                    <ringGeometry args={[0.6, 1.2, 32, 1, 0, Math.PI]} />
-                    <meshStandardMaterial color="#00ffcc" emissive="#00ffcc" emissiveIntensity={10} transparent opacity={0.5} side={THREE.DoubleSide} />
-                </mesh>
+                <group position={[0, 1.2, 0.4]}>
+                    {/* Balanced Flash for Stability */}
+                    <mesh rotation={[0, 0, Math.PI / 4]} scale={[1, 1, 1]}>
+                        <ringGeometry args={[0.8, 1.6, 64, 1, 0, Math.PI]} />
+                        <meshStandardMaterial color="#00ffff" emissive="#00ffff" emissiveIntensity={4} transparent opacity={0.6} side={THREE.DoubleSide} />
+                    </mesh>
+                    {/* Sharp Inner Core */}
+                    <mesh rotation={[0, 0, Math.PI / 4]} scale={[0.95, 0.95, 1]} position={[0, 0, 0.05]}>
+                        <ringGeometry args={[1.0, 1.3, 64, 1, 0, Math.PI]} />
+                        <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={8} transparent opacity={0.8} side={THREE.DoubleSide} />
+                    </mesh>
+                    {/* Subtle Wake */}
+                    <mesh rotation={[0, 0, Math.PI / 4]} scale={[1.1, 1.1, 1]} position={[0, 0, -0.05]}>
+                        <ringGeometry args={[0.7, 1.8, 64, 1, 0, Math.PI]} />
+                        <meshStandardMaterial color="#00ffcc" emissive="#00ffcc" emissiveIntensity={2} transparent opacity={0.2} side={THREE.DoubleSide} />
+                    </mesh>
+                </group>
+            )}
+
+            {/* DASH PULSE */}
+            {isDashing && (
+                <group position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <mesh>
+                        <ringGeometry args={[0.5, 2.5, 32]} />
+                        <meshStandardMaterial color="#00ffff" transparent opacity={0.4} emissive="#00ffff" emissiveIntensity={5} />
+                    </mesh>
+                </group>
             )}
 
             {/* DAMAGE OVERLAY */}
@@ -313,6 +471,9 @@ const RealisticPlayer: React.FC = () => {
                     <meshStandardMaterial color="#f00" transparent opacity={0.3} emissive="#f00" emissiveIntensity={5} />
                 </mesh>
             )}
+
+            {/* SENTINEL DRONES */}
+            <DroneController parentRef={groupRef} />
         </group>
     );
 };

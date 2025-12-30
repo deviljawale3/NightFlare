@@ -25,27 +25,27 @@ const handleJoystickEnd = () => {
 };
 
 const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
-  const { notification, resources, playerStats, nightflareHealth, level, levelTimer, chatMessages, setGameState, triggerNova, isPlayerGrounded, wave, score, challengeState } = useGameStore(
-    // Selector for perf optimization: only re-render on specific changes
-    (state) => ({
-      resources: state.resources,
-      playerStats: state.playerStats,
-      nightflareHealth: state.nightflareHealth,
-      level: state.level,
-      levelTimer: state.levelTimer,
-      chatMessages: state.chatMessages,
-      setGameState: state.setGameState,
-      triggerNova: state.triggerNova,
-      isPlayerGrounded: state.isPlayerGrounded,
-      wave: state.wave,
-      score: state.score,
-      challengeState: state.challengeState,
-      notification: state.notification,
-    })
-  );
+  const {
+    notification, resources, playerStats, nightflareHealth, level, levelTimer,
+    chatMessages, setGameState, triggerNova, isPlayerGrounded, wave, score,
+    challengeState, constellation, cycleWeapon
+  } = useGameStore();
 
-  // Shallow comparison isn't default for hook, so we might re-render. 
-  // But moving joystick out is the biggest win.
+  const [orbitalCooldown, setOrbitalCooldown] = useState(0);
+  const isOrbitalUnlocked = constellation.find(n => n.id === 'orbital_strike')?.currentLevel! > 0;
+
+  const triggerOrbital = () => {
+    if (orbitalCooldown > 0 || !isOrbitalUnlocked) return;
+    window.dispatchEvent(new CustomEvent('orbital-strike-target'));
+    setOrbitalCooldown(60); // 60s cooldown
+  };
+
+  React.useEffect(() => {
+    if (orbitalCooldown > 0) {
+      const timer = setInterval(() => setOrbitalCooldown(c => Math.max(0, c - 1)), 1000);
+      return () => clearInterval(timer);
+    }
+  }, [orbitalCooldown]);
 
   const [showChat, setShowChat] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -324,7 +324,32 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
         <PremiumJoystick onMove={handleJoystickMove} onEnd={handleJoystickEnd} />
 
         {/* Center Utilities */}
-        <div className="flex flex-col items-center gap-6 pointer-events-auto">
+        <div className="flex flex-col items-center gap-4 sm:gap-6 pointer-events-auto">
+          {/* Orbital Strike Button (If Unlocked) */}
+          {isOrbitalUnlocked && (
+            <button
+              onClick={triggerOrbital}
+              className={`
+                relative group
+                w-12 h-12 sm:w-16 sm:h-16 
+                rounded-2xl 
+                flex flex-col items-center justify-center 
+                transition-all duration-300
+                border-2
+                backdrop-blur-xl
+                ${orbitalCooldown === 0
+                  ? 'bg-gradient-to-br from-indigo-500/40 to-blue-500/40 border-cyan-400/60 shadow-[0_0_30px_rgba(99,102,241,0.6)] hover:scale-110 active:scale-95 cursor-pointer'
+                  : 'bg-black/40 border-white/10 opacity-70 cursor-not-allowed'
+                }
+              `}
+            >
+              <span className="text-xl sm:text-3xl drop-shadow-lg">🛰️</span>
+              {orbitalCooldown > 0 && (
+                <span className="text-[8px] sm:text-[10px] font-black text-white mt-0.5">{orbitalCooldown}s</span>
+              )}
+            </button>
+          )}
+
           <button
             onClick={triggerNova}
             className={`
@@ -449,6 +474,26 @@ const HUD: React.FC<HUDProps> = ({ onOpenInventory, onOpenCrafting }) => {
 
         {/* Premium Action Buttons */}
         <div className="flex flex-col items-end gap-6 sm:gap-14 pointer-events-auto">
+          {/* Weapon Cycle Button */}
+          <button
+            onClick={cycleWeapon}
+            className="
+              relative group
+              w-12 h-12 sm:w-16 sm:h-16 
+              rounded-2xl 
+              bg-white/5 hover:bg-white/10
+              backdrop-blur-xl
+              border border-white/10
+              flex flex-col items-center justify-center
+              shadow-lg hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]
+              transition-all duration-300
+              active:scale-95
+            "
+          >
+            <span className="text-xl sm:text-2xl drop-shadow-lg">🔄</span>
+            <span className="text-[7px] sm:text-[9px] font-black text-white/50 uppercase tracking-tighter mt-0.5">{playerStats.currentWeapon}</span>
+          </button>
+
           <button
             onPointerDown={() => isPlayerGrounded && window.dispatchEvent(new Event('player-jump'))}
             className={`

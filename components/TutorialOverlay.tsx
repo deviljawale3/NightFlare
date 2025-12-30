@@ -55,9 +55,14 @@ const TutorialOverlay: React.FC = () => {
         {current.button && (
           <button
             onClick={() => current.action && current.action()}
-            className="w-full bg-white text-black py-5 rounded-2xl font-black text-xl shadow-2xl active:scale-95 hover:bg-slate-100 transition-all mb-8 uppercase italic tracking-tight"
+            className={`w-full py-5 rounded-2xl font-black text-xl shadow-2xl active:scale-95 transition-all mb-8 uppercase italic tracking-tight ${(tutorialStep === 0 || tutorialStep === 1)
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 cursor-default animate-pulse'
+                : 'bg-white text-black hover:bg-slate-100'
+              }`}
           >
-            {current.button}
+            {tutorialStep === 0 ? "STRETCH THOSE LEGS..." :
+              tutorialStep === 1 ? "AWAITING RESOURCES..." :
+                current.button}
           </button>
         )}
 

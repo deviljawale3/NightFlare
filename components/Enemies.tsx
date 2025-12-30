@@ -11,6 +11,9 @@ const _centerVec = new THREE.Vector3(0, 0, 0);
 const _avoidVec = new THREE.Vector3();
 const _desiredVec = new THREE.Vector3();
 const _sepVec = new THREE.Vector3();
+const _tempVec = new THREE.Vector3();
+const _currPos = new THREE.Vector3();
+const _otherPos = new THREE.Vector3();
 
 // Mutable enemy class to avoid React state thrashing
 class EnemyEntity implements EnemyType {
@@ -208,80 +211,186 @@ const Enemies: React.FC = () => {
 
   useEffect(() => {
     const handleAttack = (e: any) => {
-      const { position, range, damage } = e.detail;
+      const { position, range, damage, rotation, weaponType } = e.detail;
       const attackPos = position as THREE.Vector3;
-      const now = performance.now();
-      enemiesRef.current.forEach(en => {
+      let hits = 0;
+
+      const activeEnemies = enemiesRef.current
+        .map(en => ({ entity: en, dist: new THREE.Vector3(...en.position).distanceTo(attackPos) }))
+        .sort((a, b) => a.dist - b.dist);
+
+      activeEnemies.forEach(({ entity: en, dist }) => {
         if (en.dying) return;
-        if (new THREE.Vector3(...en.position).distanceTo(attackPos) < range) {
+
+        let isHit = false;
+        if (weaponType === 'SWORD') {
+          const tempPos = new THREE.Vector3(...en.position);
+          const dx = tempPos.x - attackPos.x;
+          const dz = tempPos.z - attackPos.z;
+          const angleToEnemy = Math.atan2(dx, dz);
+          let diff = angleToEnemy - rotation;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          if (dist < range && Math.abs(diff) < 1.0) isHit = true;
+        } else if (weaponType === 'BOW') {
+          const tempPos = new THREE.Vector3(...en.position);
+          const dx = tempPos.x - attackPos.x;
+          const dz = tempPos.z - attackPos.z;
+          const angleToEnemy = Math.atan2(dx, dz);
+          let diff = angleToEnemy - rotation;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          if (dist < 20 && Math.abs(diff) < 0.15 && hits < 3) {
+            isHit = true;
+            hits++;
+          }
+        } else if (weaponType === 'LIGHTNING_STAFF') {
+          // Find first enemy in range
+          if (dist < range && hits === 0) {
+            isHit = true;
+            hits++;
+
+            // Chain to others
+            const chains: [number, number, number][][] = [];
+            let currentPos = new THREE.Vector3(...en.position);
+            let alreadyHit = new Set([en.id]);
+
+            for (let i = 0; i < 3; i++) { // Max 3 chains
+              let nextNearest = null;
+              let nextDist = 8;
+
+              enemiesRef.current.forEach(other => {
+                if (other.dying || alreadyHit.has(other.id)) return;
+                const d = new THREE.Vector3(...other.position).distanceTo(currentPos);
+                if (d < nextDist) {
+                  nextDist = d;
+                  nextNearest = other;
+                }
+              });
+
+              if (nextNearest) {
+                const target = nextNearest as any;
+                chains.push([[currentPos.x, currentPos.y + 1, currentPos.z], [target.position[0], target.position[1] + 1, target.position[2]]]);
+                target.health -= damage * 0.7; // Chain damage 70%
+                target.hitTime = performance.now() / 1000;
+                alreadyHit.add(target.id);
+                currentPos.set(...target.position);
+
+                if (target.health <= 0) {
+                  target.dying = true;
+                  target.deathTime = performance.now() / 1000;
+                  recordEnemyKill(target.type);
+                }
+              } else break;
+            }
+
+            if (chains.length > 0) {
+              window.dispatchEvent(new CustomEvent('lightning-vfx', { detail: { chains } }));
+            }
+          }
+        } else {
+          if (dist < range) isHit = true;
+        }
+
+        if (isHit) {
           en.health -= damage;
+          en.hitTime = performance.now() / 1000;
 
           window.dispatchEvent(new CustomEvent('enemy-hit-visual', {
-            detail: {
-              position: en.position,
-              damage: damage,
-              isCrit: damage > 50
-            }
+            detail: { position: en.position, damage: damage, isCrit: damage > 50 }
           }));
 
-          if (en.health <= 0) {
-            en.health = 0;
+          if (en.health <= 0 && !en.dying) {
             en.dying = true;
-            en.deathTime = now;
+            en.deathTime = performance.now() / 1000;
+            if (!en.killRecorded) {
+              en.killRecorded = true;
+              recordEnemyKill(en.type);
+            }
             soundEffects.enemyDeath();
-          }
-          else {
-            en.hitTime = now;
-            en.behavior = EnemyBehavior.CHASE;
-            en.stateTimer = now / 1000;
+            window.dispatchEvent(new CustomEvent('enemy-killed', { detail: { position: en.position, type: en.type } }));
+          } else {
             soundEffects.enemyHit();
           }
         }
       });
     };
+
+    const handleOrbitalImpact = (e: any) => {
+      const { position, radius, damage } = e.detail;
+      const impactPos = position as THREE.Vector3;
+
+      enemiesRef.current.forEach(en => {
+        if (en.dying) return;
+        const dist = new THREE.Vector3(...en.position).distanceTo(impactPos);
+        if (dist < radius) {
+          en.health -= damage;
+          en.hitTime = performance.now() / 1000;
+          if (en.health <= 0 && !en.dying) {
+            en.dying = true;
+            en.deathTime = performance.now() / 1000;
+            if (!en.killRecorded) {
+              en.killRecorded = true;
+              recordEnemyKill(en.type);
+            }
+            soundEffects.enemyDeath();
+          }
+        }
+      });
+    };
+
     const handleEnemyHit = (e: any) => {
       const { id, damage } = e.detail || {};
       if (!id) return;
-      const now = performance.now();
+      const now = performance.now() / 1000;
       enemiesRef.current.forEach(en => {
         if (en.id === id || id === 'any') {
           if (en.dying) return;
           en.health -= (damage || 35);
-
-          window.dispatchEvent(new CustomEvent('enemy-hit-visual', {
-            detail: {
-              position: en.position,
-              damage: damage || 35,
-              isCrit: (damage || 35) > 50
-            }
-          }));
-
+          en.hitTime = now;
           if (en.health <= 0) {
             en.dying = true;
             en.deathTime = now;
+            if (!en.killRecorded) {
+              en.killRecorded = true;
+              recordEnemyKill(en.type);
+            }
             soundEffects.enemyDeath();
-          }
-          else {
-            en.hitTime = now;
-            en.behavior = EnemyBehavior.CHASE;
+          } else {
             soundEffects.enemyHit();
           }
         }
       });
     };
+
     const handleNova = () => {
-      const now = performance.now();
-      enemiesRef.current.forEach(en => { if (!en.dying) { en.health = 0; en.dying = true; en.deathTime = now; en.hitTime = now; } });
+      const now = performance.now() / 1000;
+      enemiesRef.current.forEach(en => {
+        if (!en.dying) {
+          en.health = 0;
+          en.dying = true;
+          en.deathTime = now;
+          if (!en.killRecorded) {
+            en.killRecorded = true;
+            recordEnemyKill(en.type);
+          }
+          soundEffects.enemyDeath();
+        }
+      });
     };
+
     window.addEventListener('player-attack-hitbox', handleAttack);
+    window.addEventListener('orbital-impact', handleOrbitalImpact);
     window.addEventListener('enemy-hit', handleEnemyHit);
     window.addEventListener('nightflare-nova', handleNova);
+
     return () => {
       window.removeEventListener('player-attack-hitbox', handleAttack);
+      window.removeEventListener('orbital-impact', handleOrbitalImpact);
       window.removeEventListener('enemy-hit', handleEnemyHit);
       window.removeEventListener('nightflare-nova', handleNova);
     };
-  }, []);
+  }, [damageNightflare, damagePlayer, recordEnemyKill]);
 
   useFrame((state, delta) => {
     if (gameState !== GameState.PLAYING && gameState !== GameState.TUTORIAL) return;
@@ -316,64 +425,115 @@ const Enemies: React.FC = () => {
       const angle = Math.random() * Math.PI * 2;
       const radius = 55 + Math.random() * 20;
       const spawnPos: [number, number, number] = [Math.cos(angle) * radius, 0, Math.sin(angle) * radius];
-      let type: EnemyClass = 'STALKER';
-      const roll = Math.random();
+      const { titanAwakeningProgress, setTitanAwakeningProgress } = useGameStore.getState();
 
-      // Location-specific enemy spawning (20% chance)
-      const locationRoll = Math.random();
-      if (locationRoll < 0.2 && !currentEvent) {
-        // Spawn location-specific enemy
-        if (islandTheme === IslandTheme.FOREST && wave >= 2) {
-          type = 'FOREST_WOLF';
-        } else if (islandTheme === IslandTheme.VOLCANO && wave >= 3) {
-          type = 'FIRE_ELEMENTAL';
-        } else if (islandTheme === IslandTheme.ARCTIC && wave >= 4) {
-          type = 'ICE_WRAITH';
-        }
-      } else if (currentEvent === NightEvent.SIEGE) {
-        if (roll < 0.6) type = 'BRUTE';
-        else if (roll < 0.9) type = 'WRAITH';
-        else type = 'STALKER';
-      } else if (currentEvent === NightEvent.RUSH) {
-        if (roll < 0.9) type = 'STALKER';
-        else type = 'WRAITH';
+      let type: EnemyClass = 'STALKER';
+      let isBoss = false;
+
+      if (titanAwakeningProgress >= 100) {
+        // Spawn THE TITAN
+        if (islandTheme === IslandTheme.ARCTIC) type = 'TITAN_YMIR';
+        else if (islandTheme === IslandTheme.VOLCANO) type = 'TITAN_PROMETHEUS';
+        else if (islandTheme === IslandTheme.ABYSS) type = 'TITAN_KRAKEN';
+        else type = 'VOID_WALKER'; // Fallback
+
+        isBoss = true;
+        setTitanAwakeningProgress(0);
+        useGameStore.getState().showNotification('TITAN AWAKENED', 'A Colossal Threat Emerges', 'night');
       } else {
-        if ((level >= 3 || wave >= 8) && roll < 0.2) type = 'VOID_WALKER';
-        else if ((level >= 2 || wave >= 5) && roll < 0.4) type = 'WRAITH';
-        else if (wave >= 3 && roll < 0.6) type = 'BRUTE';
+        const roll = Math.random();
+        // Location-specific enemy spawning (20% chance)
+        const locationRoll = Math.random();
+        if (locationRoll < 0.2 && !currentEvent) {
+          // Spawn location-specific enemy
+          if (islandTheme === IslandTheme.FOREST && wave >= 2) {
+            type = 'FOREST_WOLF';
+          } else if (islandTheme === IslandTheme.VOLCANO && wave >= 3) {
+            type = 'FIRE_ELEMENTAL';
+          } else if (islandTheme === IslandTheme.ARCTIC && wave >= 4) {
+            type = 'ICE_WRAITH';
+          }
+        } else if (currentEvent === NightEvent.SIEGE) {
+          if (roll < 0.6) type = 'BRUTE';
+          else if (roll < 0.9) type = 'WRAITH';
+          else type = 'STALKER';
+        } else if (currentEvent === NightEvent.RUSH) {
+          if (roll < 0.9) type = 'STALKER';
+          else type = 'WRAITH';
+        } else {
+          const biome = islandTheme;
+          if (biome === IslandTheme.FOREST) {
+            if (roll < 0.3) type = 'FOREST_WOLF';
+            else if (roll < 0.1) type = 'BRUTE';
+          } else if (biome === IslandTheme.DESERT) {
+            if (roll < 0.4) type = 'SAND_RAVAGER';
+            else type = 'STALKER';
+          } else if (biome === IslandTheme.VOLCANO) {
+            if (roll < 0.4) type = 'FIRE_ELEMENTAL';
+            else type = 'BRUTE';
+          } else if (biome === IslandTheme.ARCTIC) {
+            if (roll < 0.4) type = 'ICE_WRAITH';
+            else type = 'WRAITH';
+          } else if (biome === IslandTheme.VOID) {
+            if (roll < 0.5) type = 'VOID_SPECTER';
+            else type = 'VOID_WALKER';
+          } else if (biome === IslandTheme.CELESTIAL) {
+            if (roll < 0.6) type = 'STAR_REAVER';
+          } else if (biome === IslandTheme.CRYSTAL) {
+            if (roll < 0.4) type = 'CRYSTAL_GOLEM';
+          } else if (biome === IslandTheme.CORRUPTION) {
+            type = roll < 0.5 ? 'CORRUPTED_STALKER' : 'WRAITH';
+          } else if (biome === IslandTheme.ABYSS) {
+            type = roll < 0.6 ? 'DEEP_DWELLER' : 'VOID_WALKER';
+          } else if (biome === IslandTheme.ETERNAL_SHADOW) {
+            type = level >= 90 && roll < 0.2 ? 'SHADOW_LORD' : 'VOID_WALKER';
+          }
+        }
       }
 
-      const statsMap: Record<EnemyClass, any> = {
+      const statsMap: Record<string, any> = {
         STALKER: { health: 220, speed: 12.0 },
         BRUTE: { health: 2200, speed: 5.5 },
         WRAITH: { health: 550, speed: 17.0 },
         VOID_WALKER: { health: 8500, speed: 4.8 },
-        // Location-specific enemies
-        FOREST_WOLF: { health: 300, speed: 14.0 },      // Fast pack hunter
-        FIRE_ELEMENTAL: { health: 450, speed: 10.0 },   // Medium speed, ranged
-        ICE_WRAITH: { health: 500, speed: 15.0 }        // Fast, freezing
+        FOREST_WOLF: { health: 300, speed: 14.0 },
+        FIRE_ELEMENTAL: { health: 450, speed: 10.0 },
+        ICE_WRAITH: { health: 500, speed: 15.0 },
+        SAND_RAVAGER: { health: 400, speed: 13.0 },
+        VOID_SPECTER: { health: 600, speed: 18.0 },
+        STAR_REAVER: { health: 900, speed: 14.0 },
+        CRYSTAL_GOLEM: { health: 5000, speed: 4.0 },
+        CORRUPTED_STALKER: { health: 1200, speed: 11.0 },
+        DEEP_DWELLER: { health: 4500, speed: 6.0 },
+        SHADOW_LORD: { health: 50000, speed: 7.0 },
+        OBSIDIAN_GOLEM: { health: 12000, speed: 3.5 },
+        VOID_WEAVER: { health: 3500, speed: 9.0 },
+        TITAN_YMIR: { health: 100000, speed: 2.5 },
+        TITAN_PROMETHEUS: { health: 120000, speed: 3.0 },
+        TITAN_KRAKEN: { health: 150000, speed: 2.0 }
       };
-      const baseStats = statsMap[type];
+      const baseStats = statsMap[type] || statsMap.STALKER;
       let mult = 1 + (level - 1) * 0.8 + (wave - 1) * 0.4;
       if (currentEvent === NightEvent.RUSH) mult *= 0.6;
       if (currentEvent === NightEvent.SIEGE) mult *= 1.5;
 
       const newEntity = new EnemyEntity({
-        id: `enemy-${nowMs}-${Math.random()}`,
+        id: isBoss ? `titan-${Date.now()}` : `enemy-${nowMs}-${Math.random()}`,
         type,
         position: spawnPos,
         health: baseStats.health * mult,
         maxHealth: baseStats.health * mult,
-        speed: baseStats.speed * 0.4 * (1 + level * 0.08), // FIXED: Reduced from (1 + level * 0.12)
-        target: 'NIGHTFLARE',
-        behavior: EnemyBehavior.PATROL
+        speed: baseStats.speed * 0.4 * (1 + level * 0.08),
+        target: isBoss ? 'PLAYER' : 'NIGHTFLARE',
+        behavior: isBoss ? EnemyBehavior.CHASE : EnemyBehavior.PATROL
       });
       enemiesRef.current.push(newEntity);
+      useGameStore.getState().recordBestiaryDiscovery(type);
       lastSpawnTime.current = currentTime;
       listChanged = true;
 
       // Play spawn sound
-      if (type === 'VOID_WALKER') {
+      if (isBoss || type === 'VOID_WALKER') {
         soundEffects.bossRoar();
       } else {
         soundEffects.enemySpawn();
@@ -382,117 +542,98 @@ const Enemies: React.FC = () => {
 
     for (const enemy of enemiesRef.current) {
       if (enemy.dying) {
-        // CRITICAL: Only record kill once
         if (!enemy.killRecorded) {
           recordEnemyKill(enemy.type);
           enemy.killRecorded = true;
           enemy.scored = true;
+          window.dispatchEvent(new CustomEvent('enemy-killed', { detail: { position: enemy.position, type: enemy.type } }));
 
-          // Emit kill event for visual feedback
-          window.dispatchEvent(new CustomEvent('enemy-killed', {
-            detail: { position: enemy.position, type: enemy.type }
-          }));
+          // PHASE 5: Blueprint Archeology (5% chance)
+          if (Math.random() < 0.05) {
+            window.dispatchEvent(new CustomEvent('resource-collected', { detail: { position: enemy.position, type: 'blueprint' } }));
+          }
 
-          // FEATURE: Stun nearby enemies when one dies to allow collecting loot
-          const deathPos = new THREE.Vector3(...enemy.position);
+          _tempVec.set(...enemy.position);
+          // Simplified stun logic for performance
           enemiesRef.current.forEach(other => {
-            if (other !== enemy && !other.dying && new THREE.Vector3(...other.position).distanceTo(deathPos) < 12) {
-              other.stunTimer = nowMs + 1200; // 1.2s stun
+            if (other !== enemy && !other.dying) {
+              _otherPos.set(...other.position);
+              if (_otherPos.distanceToSquared(_tempVec) < 144) other.stunTimer = nowMs + 1200;
             }
           });
         }
-
-        if (nowMs - enemy.deathTime > 1600) { continue; }
+        // INCREASED DEATH DURATION TO 3 SECONDS
+        if (nowMs - enemy.deathTime > 3000) continue;
         survivors.push(enemy); continue;
       }
-      const currentPos = new THREE.Vector3(...enemy.position);
+      _currPos.set(...enemy.position);
 
-      // Check Stun
       if (nowMs < enemy.stunTimer) {
-        // Shake effect for stun
-        const shakeX = (Math.random() - 0.5) * 0.2;
-        const shakeZ = (Math.random() - 0.5) * 0.2;
-        enemy.lerpPosition.set(enemy.position[0] + shakeX, enemy.position[1], enemy.position[2] + shakeZ);
-        survivors.push(enemy);
-        continue;
+        // Procedural jitter when stunned
+        enemy.lerpPosition.set(
+          enemy.position[0] + (Math.sin(nowMs * 0.05) * 0.1),
+          0,
+          enemy.position[2] + (Math.cos(nowMs * 0.05) * 0.1)
+        );
+        survivors.push(enemy); continue;
       }
 
-      const toPlayer = playerPos.clone().sub(currentPos);
-      const distToPlayer = toPlayer.length();
-      const distToCore = currentPos.length();
+      const distToPlayer = _currPos.distanceTo(playerPos);
+      const distToCore = _currPos.length();
       const visionRange = 45 + level * 5;
 
       if (enemy.behavior === EnemyBehavior.PATROL && distToPlayer < visionRange) { enemy.behavior = EnemyBehavior.CHASE; enemy.stateTimer = currentTime; }
-      else if (enemy.behavior === EnemyBehavior.CHASE && distToPlayer > visionRange + 20) { enemy.behavior = EnemyBehavior.PATROL; enemy.stateTimer = currentTime; }
+      else if (enemy.behavior === EnemyBehavior.CHASE && distToPlayer > visionRange + 25) { enemy.behavior = EnemyBehavior.PATROL; enemy.stateTimer = currentTime; }
 
-      let moveTarget = _centerVec.clone();
-      let spdMult = 1.0;
+      let moveTarget = _centerVec;
+      let spdMult = useGameStore.getState().isTimeSlowed ? 0.3 : 1.0; // BUFF: 70% speed reduction during Nova
+
       if (enemy.behavior === EnemyBehavior.PATROL) {
         const wp = enemy.waypoints[enemy.currentWaypointIdx];
-        if (currentPos.distanceTo(wp) < 5) enemy.currentWaypointIdx = (enemy.currentWaypointIdx + 1) % 4;
-        moveTarget.copy(wp); spdMult = 0.6;
-      } else { moveTarget.copy(playerPos); spdMult = 1.6; }
+        if (_currPos.distanceToSquared(wp) < 25) enemy.currentWaypointIdx = (enemy.currentWaypointIdx + 1) % 4;
+        moveTarget = wp; spdMult = 0.6;
+      } else { moveTarget = playerPos; spdMult = 1.6; }
 
       const isAttacking = enemy.attackPhase !== 'IDLE';
-      const attackRange = enemy.type === 'BRUTE' ? 12 : 9;
-      // REFINED: Slower attack rate (3.5s / 6s) to be less overwhelming
-      if (!isAttacking && (currentPos.distanceTo(moveTarget) < attackRange || distToCore < 10) && currentTime - enemy.lastAttackTime > (enemy.type === 'BRUTE' ? 6 : 3.5)) {
+      const attackRangeSq = enemy.type === 'BRUTE' ? 144 : 81;
+      if (!isAttacking && (_currPos.distanceToSquared(moveTarget) < attackRangeSq || distToCore < 10) && currentTime - enemy.lastAttackTime > (enemy.type === 'BRUTE' ? 6 : 3.5)) {
         enemy.attackPhase = 'WINDUP'; enemy.attackAnimTimer = currentTime;
       }
+
       if (isAttacking) {
         const animElapsed = currentTime - enemy.attackAnimTimer;
-        if (enemy.attackPhase === 'WINDUP') {
-          spdMult *= 0.1;
-          if (animElapsed > 0.6) {
-            enemy.attackPhase = 'STRIKE'; enemy.attackAnimTimer = currentTime;
-            const dmg = (enemy.type === 'BRUTE' ? 350 : 100) * (1 + level * 0.4);
-            soundEffects.enemyAttack();
-            if (currentPos.distanceTo(playerPos) < 4.0) { damagePlayer(dmg * 0.15); if (enemy.type === 'BRUTE') triggerScreenShake(1.2); }
-            else if (distToCore < 12) damageNightflare(dmg * 0.3);
-            window.dispatchEvent(new CustomEvent('attack-impact', { detail: { position: currentPos.toArray() } }));
-          }
-        } else if (enemy.attackPhase === 'STRIKE') {
-          spdMult *= 5.0;
-          if (animElapsed > 0.3) { enemy.attackPhase = 'RECOVERY'; enemy.attackAnimTimer = currentTime; }
-        } else if (enemy.attackPhase === 'RECOVERY') {
-          spdMult *= 0.2;
-          if (animElapsed > 0.6) { enemy.attackPhase = 'IDLE'; enemy.lastAttackTime = currentTime; }
-        }
+        if (enemy.attackPhase === 'WINDUP') { spdMult *= 0.1; if (animElapsed > 0.6) { enemy.attackPhase = 'STRIKE'; enemy.attackAnimTimer = currentTime; soundEffects.enemyAttack(); const dmg = (enemy.type === 'BRUTE' ? 350 : 100) * (1 + level * 0.4); if (_currPos.distanceTo(playerPos) < 4.0) { damagePlayer(dmg * 0.15); if (enemy.type === 'BRUTE') triggerScreenShake(1.2); } else if (distToCore < 12) damageNightflare(dmg * 0.3); window.dispatchEvent(new CustomEvent('attack-impact', { detail: { position: enemy.position } })); } }
+        else if (enemy.attackPhase === 'STRIKE') { spdMult *= 5.0; if (animElapsed > 0.3) { enemy.attackPhase = 'RECOVERY'; enemy.attackAnimTimer = currentTime; } }
+        else if (enemy.attackPhase === 'RECOVERY') { spdMult *= 0.2; if (animElapsed > 0.6) { enemy.attackPhase = 'IDLE'; enemy.lastAttackTime = currentTime; } }
       }
 
-      _desiredVec.copy(moveTarget).sub(currentPos).normalize();
-
-      // Optimization: Smaller neighborhood for separation
+      _desiredVec.copy(moveTarget).sub(_currPos).normalize();
       _sepVec.set(0, 0, 0);
+      // Group separation optimization: only check every few frames or reduce radius
       for (const other of survivors) {
         if (other === enemy || other.dying) continue;
-        const op = new THREE.Vector3(...other.position);
-        const dstSq = currentPos.distanceToSquared(op);
-        if (dstSq < 25.0) { // 5.0 unit distance
-          const dst = Math.sqrt(dstSq);
-          _sepVec.add(currentPos.clone().sub(op).normalize().multiplyScalar(8 / (dst + 0.1)));
+        _otherPos.set(...other.position);
+        if (_currPos.distanceToSquared(_otherPos) < 16) {
+          _tempVec.copy(_currPos).sub(_otherPos).normalize();
+          _sepVec.add(_tempVec);
         }
       }
 
       _avoidVec.set(0, 0, 0);
       for (const obs of obstacleMap) {
-        const toObs = obs.pos.clone().sub(currentPos);
-        const distSq = toObs.lengthSq();
-        if (distSq < 144) { // 12 unit distance
-          _avoidVec.add(toObs.clone().projectOnVector(_desiredVec).sub(toObs).normalize().multiplyScalar(40));
+        _tempVec.copy(obs.pos).sub(_currPos);
+        const distSq = _tempVec.lengthSq();
+        if (distSq < 144) {
+          _tempVec.projectOnVector(_desiredVec).sub(_tempVec).normalize().multiplyScalar(40);
+          _avoidVec.add(_tempVec);
         }
       }
 
-      const steering = _desiredVec.clone().add(_avoidVec).add(_sepVec).normalize();
+      const steering = _desiredVec.add(_avoidVec).add(_sepVec).normalize();
       const velocity = steering.multiplyScalar(enemy.speed * spdMult * delta);
       enemy.lastVelocity.copy(steering);
-
-      // Update position
       enemy.position = [enemy.position[0] + velocity.x, 0, enemy.position[2] + velocity.z];
-
-      // Update runtime lerp position (frame-rate independent)
       enemy.lerpPosition.lerp(new THREE.Vector3(...enemy.position), 1 - Math.exp(-15 * delta));
-
       survivors.push(enemy);
     }
 
@@ -518,6 +659,8 @@ const Enemies: React.FC = () => {
     </group>
   );
 };
+
+import ColossalTitan from './ColossalTitan';
 
 const EnemyRenderer: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
   const ref = useRef<THREE.Group>(null);
@@ -551,6 +694,17 @@ const EnemyRenderer: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
 
   const renderModel = () => {
     const isStunned = performance.now() < entity.stunTimer;
+
+    if (entity.type.startsWith('TITAN_')) {
+      return (
+        <ColossalTitan
+          type={entity.type}
+          isAttacking={entity.attackPhase !== 'IDLE'}
+          hitTime={entity.hitTime}
+        />
+      );
+    }
+
     return (
       <PremiumZombie
         position={[0, 0, 0]}
@@ -559,11 +713,18 @@ const EnemyRenderer: React.FC<{ entity: EnemyEntity }> = ({ entity }) => {
         isAttacking={entity.attackPhase !== 'IDLE'}
         isDying={entity.dying}
         isStunned={isStunned}
+        hitTime={entity.hitTime}
       />
     );
   };
 
   const skinColor = entity.type === 'WRAITH' ? '#9d00ff' : (entity.type === 'BRUTE' ? '#ff6600' : '#ff4400');
+
+  useEffect(() => {
+    if (ref.current) {
+      (ref.current as any).isEnemyHeuristic = true;
+    }
+  }, []);
 
   return (
     <group ref={ref}>

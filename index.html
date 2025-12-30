@@ -5,11 +5,24 @@
     <meta charset="UTF-8">
     <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NightFlare: Eternal Shadow</title>
+    <title>NightFlare | Ultimate Survival ARPG</title>
+    <meta name="description"
+        content="Survive the Eternal Shadow in NightFlare, a premium high-performance survival ARPG. Protect the NightFlare, gather resources, and conquer the void.">
+    <meta name="keywords" content="NightFlare, Survival Game, ARPG, WebGL, Three.js, React, DeeJay Labs, Mobile Gaming">
+    <meta name="author" content="DeeJay Labs">
+
+    <!-- Open Graph / Social Media -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="NightFlare: Eternal Shadow">
+    <meta property="og:description"
+        content="The ultimate survival experience. High-fidelity graphics, intense combat, and strategic base defense.">
+    <meta property="og:image" content="./banner.jpg">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
     <style>
         * {
             box-sizing: border-box;
@@ -129,8 +142,46 @@
             }
         }
 
+        @keyframes slideInTop {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(30px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes pulseGlow {
+
+            0%,
+            100% {
+                opacity: 0.5;
+                filter: blur(5px);
+            }
+
+            50% {
+                opacity: 0.8;
+                filter: blur(10px);
+            }
+        }
+
         .animate-in {
-            animation-duration: 0.3s;
+            animation-duration: 0.5s;
             animation-fill-mode: both;
             animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
         }
@@ -147,10 +198,9 @@
             animation-name: zoomIn;
         }
 
-        .slide-in-from-bottom-10 {
-            animation-name: slideInBottom;
-        }
-
+        .slide-in-from-bottom-10,
+        .slide-in-from-bottom-8,
+        .slide-in-from-bottom-12,
         .slide-in-from-bottom-2 {
             animation-name: slideInBottom;
         }
@@ -159,42 +209,36 @@
             animation-name: slideInLeft;
         }
 
+        .slide-in-from-top-12,
+        .slide-in-from-top {
+            animation-name: slideInTop;
+        }
+
+        .slide-in-from-right {
+            animation-name: slideInRight;
+        }
+
         .zoom-in-95 {
             animation-name: zoomIn;
         }
 
-        /* Tailwind-like utils if missing from CDN */
-        .backdrop-blur-xl {
-            -webkit-backdrop-filter: blur(24px);
-            backdrop-filter: blur(24px);
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
         }
 
-        .backdrop-blur-md {
-            -webkit-backdrop-filter: blur(12px);
-            backdrop-filter: blur(12px);
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
         }
 
-        .backdrop-blur-2xl {
-            -webkit-backdrop-filter: blur(40px);
-            backdrop-filter: blur(40px);
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
     </style>
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "three": "https://esm.sh/three@0.170.0",
-    "three/": "https://esm.sh/three@0.170.0/",
-    "@react-three/fiber": "https://esm.sh/@react-three/fiber@9.0.0-rc.0?external=three,react,react-dom",
-    "@react-three/drei": "https://esm.sh/@react-three/drei@10.0.0-rc.0?external=three,react,react-dom,@react-three/fiber",
-    "zustand": "https://esm.sh/zustand@5.0.2?external=react",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
-  }
-}
-</script>
 </head>
 
 <body>

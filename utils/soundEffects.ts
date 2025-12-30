@@ -49,7 +49,7 @@ class SoundEffectsManager {
     /**
      * Generate sound using Web Audio API
      */
-    private generateSound(effect: SoundEffect): void {
+    private generateSound(effect: SoundEffect, detune: number = 0): void {
         if (!this.audioContext || !this.enabled) return;
 
         const ctx = this.audioContext;
@@ -57,6 +57,7 @@ class SoundEffectsManager {
 
         // Create oscillator and gain nodes
         const oscillator = ctx.createOscillator();
+        oscillator.detune.setValueAtTime(detune, now);
         const gainNode = ctx.createGain();
         const filter = ctx.createBiquadFilter();
 
@@ -154,6 +155,16 @@ class SoundEffectsManager {
                 gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
                 oscillator.start(now);
                 oscillator.stop(now + 0.08);
+                break;
+
+            case 'player_roll':
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(150, now);
+                oscillator.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+                gainNode.gain.setValueAtTime(volume * 0.4, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                oscillator.start(now);
+                oscillator.stop(now + 0.3);
                 break;
 
             // Player Combat
@@ -450,7 +461,7 @@ class SoundEffectsManager {
     /**
      * Play a sound effect
      */
-    play(effect: SoundEffect, volumeMultiplier: number = 1): void {
+    play(effect: SoundEffect): void {
         if (!this.enabled || !this.audioContext) return;
         this.generateSound(effect);
     }
@@ -458,8 +469,10 @@ class SoundEffectsManager {
     /**
      * Play with random pitch variation
      */
-    playWithVariation(effect: SoundEffect, pitchVariation: number = 0.1): void {
-        this.play(effect);
+    playWithVariation(effect: SoundEffect, variationRange: number = 200): void {
+        if (!this.enabled || !this.audioContext) return;
+        const detune = (Math.random() - 0.5) * variationRange;
+        this.generateSound(effect, detune);
     }
 
     setMasterVolume(volume: number): void {

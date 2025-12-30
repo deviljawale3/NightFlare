@@ -23,7 +23,7 @@ interface SettingsState {
     hapticFeedback: boolean;
     sensitivity: number;
     autoAim: boolean;
-    autoAim: boolean;
+
     controlLayout: 'A' | 'B' | 'C';
     movementMode: 'joystick' | 'touch';
     cameraPreset: 'DEFAULT' | 'CLOSE' | 'TOP_DOWN' | 'SIDE' | 'ISOMETRIC' | 'FREE' | 'CINEMATIC';

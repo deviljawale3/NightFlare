@@ -10,7 +10,7 @@ interface CraftingMenuProps {
 
 const CraftingMenu: React.FC<CraftingMenuProps> = ({ isOpen, onClose }) => {
   const { resources, consumeResource, upgradePlayer, healNightflare, addStructure, buyPermanentUpgrade, playerStats } = useGameStore();
-  const [tab, setTab] = useState<'FORGE' | 'SKILLS'>('FORGE');
+  const [tab, setTab] = useState<'FORGE' | 'SKILLS' | 'DEFENSE'>('FORGE');
 
   if (!isOpen) return null;
 
@@ -22,6 +22,33 @@ const CraftingMenu: React.FC<CraftingMenuProps> = ({ isOpen, onClose }) => {
       cost: { wood: 10, stone: 6, lightShards: 2 },
       action: () => upgradePlayer({ attackDamage: 85, hasSpear: true })
     },
+    {
+      id: 'repair',
+      name: 'STOKE FIRE',
+      description: 'Heals the Nightflare core (+45HP)',
+      cost: { wood: 12, stone: 0, lightShards: 4 },
+      action: () => healNightflare(45)
+    },
+    {
+      id: 'titan_armor',
+      name: 'TITAN ARMOR',
+      description: 'Reduces all damage by 50% (Legendary)',
+      cost: { wood: 50, stone: 100, lightShards: 50, titanCores: 2 },
+      action: () => upgradePlayer({ hasArmor: true })
+    },
+    {
+      id: 'void_blade',
+      name: 'VOID BLADE',
+      description: 'Unlocks the Void Blade (Requires 5 Cores)',
+      cost: { wood: 0, stone: 0, lightShards: 200, titanCores: 5 },
+      action: () => {
+        upgradePlayer({ attackDamage: 150 });
+        (window as any).soundEffects?.play('legendary_unlock');
+      }
+    }
+  ];
+
+  const defenseRecipes = [
     {
       id: 'wall',
       name: 'EMBER WALL',
@@ -35,7 +62,7 @@ const CraftingMenu: React.FC<CraftingMenuProps> = ({ isOpen, onClose }) => {
     {
       id: 'pylon',
       name: 'LIGHT PYLON',
-      description: 'Homing turret that targets nearest shadow',
+      description: 'Standard Light Turret',
       cost: { wood: 6, stone: 6, lightShards: 12 },
       action: () => {
         const playerPos = (window as any).playerPos;
@@ -43,11 +70,34 @@ const CraftingMenu: React.FC<CraftingMenuProps> = ({ isOpen, onClose }) => {
       }
     },
     {
-      id: 'repair',
-      name: 'STOKE FIRE',
-      description: 'Heals the Nightflare core (+45HP)',
-      cost: { wood: 12, stone: 0, lightShards: 4 },
-      action: () => healNightflare(45)
+      id: 'sentry',
+      name: 'SENTRY TURRET',
+      description: 'Rapid-fire Machine Gun Turret',
+      cost: { wood: 20, stone: 15, lightShards: 5 },
+      action: () => {
+        const playerPos = (window as any).playerPos;
+        addStructure('SENTRY_TURRET', playerPos ? [playerPos.x, 0, playerPos.z] : [0, 0, 0]);
+      }
+    },
+    {
+      id: 'prism',
+      name: 'PRISM TOWER',
+      description: 'Chaining Laser Defense',
+      cost: { wood: 10, stone: 30, lightShards: 25 },
+      action: () => {
+        const playerPos = (window as any).playerPos;
+        addStructure('PRISM_TOWER', playerPos ? [playerPos.x, 0, playerPos.z] : [0, 0, 0]);
+      }
+    },
+    {
+      id: 'stasis',
+      name: 'STASIS TRAP',
+      description: 'Slows enemies by 80%',
+      cost: { wood: 5, stone: 10, lightShards: 5 },
+      action: () => {
+        const playerPos = (window as any).playerPos;
+        addStructure('STASIS_TRAP', playerPos ? [playerPos.x, 0, playerPos.z] : [0, 0, 0]);
+      }
     }
   ];
 
@@ -80,6 +130,7 @@ const CraftingMenu: React.FC<CraftingMenuProps> = ({ isOpen, onClose }) => {
             </h2>
             <div className="flex gap-2 md:gap-6 mt-3 md:mt-6">
               <button onClick={() => setTab('FORGE')} className={`px-4 md:px-8 py-2 md:py-3 rounded-xl font-black text-[9px] md:text-xs uppercase tracking-widest transition-all ${tab === 'FORGE' ? 'bg-orange-600 text-white' : 'bg-white/5 text-white/40 border border-white/5'}`}>Forging</button>
+              <button onClick={() => setTab('DEFENSE')} className={`px-4 md:px-8 py-2 md:py-3 rounded-xl font-black text-[9px] md:text-xs uppercase tracking-widest transition-all ${tab === 'DEFENSE' ? 'bg-orange-600 text-white' : 'bg-white/5 text-white/40 border border-white/5'}`}>Defense</button>
               <button onClick={() => setTab('SKILLS')} className={`px-4 md:px-8 py-2 md:py-3 rounded-xl font-black text-[9px] md:text-xs uppercase tracking-widest transition-all ${tab === 'SKILLS' ? 'bg-orange-600 text-white' : 'bg-white/5 text-white/40 border border-white/5'}`}>Upgrades</button>
             </div>
           </div>
@@ -98,66 +149,82 @@ const CraftingMenu: React.FC<CraftingMenuProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Content Area */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 overflow-y-auto pr-2 custom-scrollbar pb-6 flex-1">
-          {tab === 'FORGE' ? (
-            recipes.map(recipe => (
-              <div key={recipe.id} className="bg-[#0b0b0b] p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-white/5 flex flex-col justify-between group hover:border-white/10 transition-all hover:bg-[#0e0e0e]">
-                <div>
-                  <h3 className="text-white font-black text-2xl md:text-3xl uppercase tracking-tighter mb-2 group-hover:text-orange-500 transition-colors">{recipe.name}</h3>
-                  <p className="text-[10px] md:text-[12px] text-white/40 font-semibold leading-relaxed mb-4 md:mb-8">{recipe.description}</p>
-
-                  <div className="flex flex-wrap gap-2 md:gap-3 mb-6 md:mb-10">
-                    {Object.entries(recipe.cost).map(([res, amount]) => (amount as number) > 0 && (
-                      <div key={res} className={`px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-[9px] md:text-[11px] font-black uppercase flex items-center gap-1.5 md:gap-2 border ${resources[res as keyof typeof resources] >= (amount as number) ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                        <span>{amount} {res.toUpperCase()}</span>
-                      </div>
+        <div className="flex-1 overflow-y-auto px-1 scrollbar-hide">
+          {tab === 'FORGE' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5">
+              {recipes.map(recipe => (
+                // Recipe Item rendering logic... reusing UI for brevity but normally would extract
+                <div key={recipe.id} className="relative group p-4 md:p-6 rounded-[2rem] bg-white/5 hover:bg-orange-500/10 border border-white/5 hover:border-orange-500/50 transition-all cursor-pointer" onClick={() => handleCraft(recipe)}>
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-xl font-black text-white italic tracking-tighter">{recipe.name}</h3>
+                    {canCraft(recipe.cost) ? <span className="bg-green-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">READY</span> : <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">LOCKED</span>}
+                  </div>
+                  <p className="text-white/40 text-xs mb-4 max-w-[80%]">{recipe.description}</p>
+                  <div className="flex gap-3 mt-auto">
+                    {Object.entries(recipe.cost).map(([res, amount]) => (
+                      <div key={res} className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider ${resources[res as keyof typeof resources] >= (amount as number) ? 'bg-white/10 text-white/70' : 'bg-red-500/20 text-red-500'}`}>{res}: {amount as any}</div>
                     ))}
                   </div>
                 </div>
-
-                <button
-                  disabled={!canCraft(recipe.cost)}
-                  onClick={() => handleCraft(recipe)}
-                  className={`w-full py-4 md:py-6 rounded-2xl font-black text-[11px] md:text-[13px] uppercase tracking-[0.2em] md:tracking-[0.4em] transition-all shadow-2xl ${canCraft(recipe.cost) ? 'bg-[#151515] text-white/40 border border-white/5 hover:bg-white hover:text-black hover:scale-[1.02] active:scale-95' : 'bg-white/5 text-white/5 cursor-not-allowed opacity-30'}`}
-                >
-                  ASSEMBLE
-                </button>
-              </div>
-            ))
-          ) : (
-            skillTree.map(skill => {
-              const level = (playerStats.upgradeLevels as any)[skill.id];
-              const cost = (level + 1) * 20;
-              const canAfford = resources.lightShards >= cost;
-              return (
-                <div key={skill.id} className="bg-[#0b0b0b] p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-white/5 flex flex-col justify-between group">
-                  <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-white font-black text-2xl md:text-3xl uppercase tracking-tighter">{skill.name}</h3>
-                      <span className="text-xl md:text-2xl">{skill.icon}</span>
-                    </div>
-                    <p className="text-[10px] md:text-[12px] text-white/40 font-semibold leading-relaxed mb-4 md:mb-6">{skill.desc}</p>
-                    <div className="bg-white/5 p-3 md:p-4 rounded-xl border border-white/5 mb-6 md:mb-8">
-                      <div className="text-[8px] md:text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">Current Mastery</div>
-                      <div className="text-white font-black text-base md:text-lg">LEVEL {level}</div>
-                    </div>
-                  </div>
-                  <button
-                    disabled={!canAfford}
-                    onClick={() => buyPermanentUpgrade(skill.id as any)}
-                    className={`w-full py-4 md:py-6 rounded-2xl font-black text-[11px] md:text-[13px] uppercase tracking-[0.2em] md:tracking-[0.4em] transition-all ${canAfford ? 'bg-orange-600 text-white hover:scale-[1.02]' : 'bg-white/5 text-white/20 opacity-30 cursor-not-allowed'}`}
-                  >
-                    {canAfford ? `UPGRADE (${cost} ✨)` : `NEED ${cost} ✨`}
-                  </button>
-                </div>
-              );
-            })
+              ))}
+            </div>
           )}
-        </div>
 
-        {/* Footer Protocol */}
-        <div className="mt-4 md:mt-8 flex justify-center opacity-30 text-center">
-          <p className="text-[7px] md:text-[9px] font-black text-white/60 uppercase tracking-[0.2em] md:tracking-[0.5em] italic px-4">DeeJay Labs Secure Protocol v4.5 • Permanent upgrades persist until game reset</p>
+          {tab === 'DEFENSE' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5">
+              {defenseRecipes.map(recipe => (
+                <div key={recipe.id} className="relative group p-4 md:p-6 rounded-[2rem] bg-white/5 hover:bg-blue-500/10 border border-white/5 hover:border-blue-500/50 transition-all cursor-pointer" onClick={() => handleCraft(recipe)}>
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-xl font-black text-white italic tracking-tighter">{recipe.name}</h3>
+                    {canCraft(recipe.cost) ? <span className="bg-green-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">READY</span> : <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">LOCKED</span>}
+                  </div>
+                  <p className="text-white/40 text-xs mb-4 max-w-[80%]">{recipe.description}</p>
+                  <div className="flex gap-3 mt-auto">
+                    {Object.entries(recipe.cost).map(([res, amount]) => (
+                      <div key={res} className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider ${resources[res as keyof typeof resources] >= (amount as number) ? 'bg-white/10 text-white/70' : 'bg-red-500/20 text-red-500'}`}>{res}: {amount as any}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === 'SKILLS' && (
+            <div className="space-y-4">
+              {skillTree.map(skill => {
+                const level = (playerStats.upgradeLevels as any)[skill.id];
+                const cost = (level + 1) * 20;
+                const canAfford = resources.lightShards >= cost;
+                return (
+                  <div key={skill.id} className="relative group p-6 rounded-[2.5rem] bg-white/5 hover:bg-purple-500/10 border border-white/5 hover:border-purple-500/50 transition-all cursor-pointer flex items-center gap-6" onClick={() => { if (canAfford) { buyPermanentUpgrade(skill.id as any); if ('vibrate' in navigator) navigator.vibrate(60); } }}>
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center text-3xl shadow-inner">{skill.icon}</div>
+                    <div className="flex-1">
+                      <h3 className="text-2xl font-black text-white italic tracking-tighter">{skill.name}</h3>
+                      <p className="text-white/40 text-sm">{skill.desc}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-white/30 font-bold uppercase tracking-widest mb-1">Current Level</div>
+                      <div className="text-4xl font-black text-white/20 group-hover:text-white transition-colors">
+                        {playerStats.upgradeLevels[skill.id as keyof typeof playerStats.upgradeLevels] || 0}
+                      </div>
+                    </div>
+                    <button
+                      disabled={!canAfford}
+                      onClick={() => buyPermanentUpgrade(skill.id as any)}
+                      className={`absolute bottom-4 right-4 py-2 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${canAfford ? 'bg-orange-600 text-white hover:scale-[1.02]' : 'bg-white/5 text-white/20 opacity-30 cursor-not-allowed'}`}
+                    >
+                      {canAfford ? `UPGRADE (${cost} ✨)` : `NEED ${cost} ✨`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Footer Protocol */}
+          <div className="mt-4 md:mt-8 flex justify-center opacity-30 text-center">
+            <p className="text-[7px] md:text-[9px] font-black text-white/60 uppercase tracking-[0.2em] md:tracking-[0.5em] italic px-4">DeeJay Labs Secure Protocol v4.5 • Permanent upgrades persist until game reset</p>
+          </div>
         </div>
       </div>
     </div>

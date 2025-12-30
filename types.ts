@@ -13,6 +13,63 @@ export enum TimeOfDay {
   NIGHT = 'NIGHT'
 }
 
+export type HeroClass = 'WARDEN' | 'WRAITH' | 'NOVA' | 'NONE';
+
+export interface DailyOperation {
+  id: string;
+  title: string;
+  description: string;
+  task: 'KILL' | 'COLLECT' | 'SURVIVE' | 'BUILD';
+  goal: number;
+  current: number;
+  reward: number;
+  type: 'SHARDS' | 'TITAN_CREDITS' | 'STARDUST';
+  completed: boolean;
+  claimed: boolean;
+}
+
+export interface Blueprint {
+  id: string;
+  name: string;
+  description: string;
+  unlocked: boolean;
+  type: 'STRUCTURE' | 'WEAPON' | 'UTILITY';
+}
+
+export type ConstellationEffectType =
+  | 'MAX_HEALTH'
+  | 'DAMAGE'
+  | 'SPEED'
+  | 'NOVA_RECHARGE'
+  | 'STARTING_SHARDS'
+  | 'CRIT_CHANCE'
+  | 'DASH_COOLDOWN'
+  | 'RESOURCE_GAIN'
+  | 'UNLOCK_DRONE'
+  | 'UNLOCK_ORBITAL_STRIKE';
+
+export type DroneType = 'VORTEX' | 'STINGER' | 'AEGIS';
+
+export interface DroneConfig {
+  type: DroneType;
+  unlocked: boolean;
+  level: number;
+}
+
+export interface ConstellationNode {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  maxLevel: number;
+  currentLevel: number;
+  effectType: ConstellationEffectType;
+  effectValue: number; // Value per level
+  position: { x: number; y: number }; // Percentage 0-100 for responsive UI
+  requiredNodes: string[]; // IDs of prerequisite nodes
+  icon: string;
+}
+
 export interface GameSettings {
   soundEnabled: boolean;
   vibrationEnabled: boolean;
@@ -26,6 +83,17 @@ export enum NightEvent {
   RUSH = 'RUSH', // High spawn rate, low HP
   SIEGE = 'SIEGE', // Low spawn rate, high HP
   PHANTOM = 'PHANTOM', // Invisible until close
+  ION_STORM = 'ION_STORM', // Lightning strikes
+  DENSE_FOG = 'DENSE_FOG', // Low visibility
+  STARFALL = 'STARFALL', // Shards rain
+}
+
+export enum WeatherType {
+  CLEAR = 'CLEAR',
+  BLIZZARD = 'BLIZZARD',
+  SANDSTORM = 'SANDSTORM',
+  VOID_MIASMA = 'VOID_MIASMA',
+  ION_TEMPEST = 'ION_TEMPEST'
 }
 
 export enum EnemyBehavior {
@@ -39,7 +107,14 @@ export enum EnemyBehavior {
 export enum IslandTheme {
   FOREST = 'FOREST',
   VOLCANO = 'VOLCANO',
-  ARCTIC = 'ARCTIC'
+  ARCTIC = 'ARCTIC',
+  DESERT = 'DESERT',
+  VOID = 'VOID',
+  CELESTIAL = 'CELESTIAL',
+  CRYSTAL = 'CRYSTAL',
+  CORRUPTION = 'CORRUPTION',
+  ABYSS = 'ABYSS',
+  ETERNAL_SHADOW = 'ETERNAL_SHADOW'
 }
 
 export interface Resources {
@@ -47,6 +122,7 @@ export interface Resources {
   stone: number;
   lightShards: number;
   food: number;
+  titanCores: number;
 }
 
 export interface PlayerStats {
@@ -58,6 +134,7 @@ export interface PlayerStats {
   hasArmor: boolean;
   hasSpear: boolean;
   novaCharge: number; // 0 to 100
+  novaMultiplier: number;
   upgradeLevels: {
     strength: number;
     agility: number;
@@ -71,14 +148,27 @@ export interface PlayerStats {
     STAFF: number;
     SWORD: number;
     BOW: number;
+    LIGHTNING_STAFF: number;
   };
-  currentWeapon: 'STAFF' | 'SWORD' | 'BOW';
+  activeDrones: DroneType[];
+  currentWeapon: 'STAFF' | 'SWORD' | 'BOW' | 'LIGHTNING_STAFF';
+  heroClass: HeroClass;
+  titanCredits: number;
+  blueprints: string[];
+  unlockedStructures: string[];
+  temperature: number; // For Arctic Biome
+  missions: DailyOperation[];
+  xp: number;
+  level: number;
+  ultimateCharge: number; // 0 to 100
+  weatherEffectActive: boolean;
 }
 
 export enum WeaponType {
   STAFF = 'STAFF', // Starter
   SWORD = 'SWORD', // Unlocked at 5000 score
   BOW = 'BOW',     // Unlocked at 15000 score
+  LIGHTNING_STAFF = 'LIGHTNING_STAFF', // Unlocked at Phase 4
 }
 
 export type EnemyClass =
@@ -86,10 +176,21 @@ export type EnemyClass =
   | 'BRUTE'
   | 'WRAITH'
   | 'VOID_WALKER'
-  // Location-specific enemies
-  | 'FOREST_WOLF'      // Forest: Fast pack hunter
-  | 'FIRE_ELEMENTAL'   // Volcano: Ranged fire attacks
-  | 'ICE_WRAITH';      // Arctic: Freezing attacks
+  | 'FOREST_WOLF'
+  | 'FIRE_ELEMENTAL'
+  | 'ICE_WRAITH'
+  | 'SAND_RAVAGER'
+  | 'VOID_SPECTER'
+  | 'STAR_REAVER'
+  | 'CRYSTAL_GOLEM'
+  | 'CORRUPTED_STALKER'
+  | 'DEEP_DWELLER'
+  | 'SHADOW_LORD'
+  | 'OBSIDIAN_GOLEM'
+  | 'VOID_WEAVER'
+  | 'TITAN_YMIR'      // Frost Titan
+  | 'TITAN_PROMETHEUS' // Fire Titan
+  | 'TITAN_KRAKEN';    // Abyss Titan
 
 export type EnemyTarget = 'NIGHTFLARE' | 'PLAYER' | 'STRUCTURE';
 
@@ -117,7 +218,7 @@ export interface ResourceNode {
 
 export interface Structure {
   id: string;
-  type: 'WALL' | 'PYLON';
+  type: 'WALL' | 'PYLON' | 'SENTRY_TURRET' | 'PRISM_TOWER' | 'STASIS_TRAP';
   position: [number, number, number];
   health: number;
   maxHealth: number;
@@ -129,6 +230,19 @@ export interface UserProfile {
   email: string;
   avatar: string; // URL or preset ID
   bio?: string;
+  defenseLayout: BaseLayout;
+  defensePoints: number;
+  defenseRank: PlayerRank;
+}
+
+export interface SavedStructure {
+  type: 'WALL' | 'PYLON' | 'SENTRY_TURRET' | 'PRISM_TOWER' | 'STASIS_TRAP';
+  position: [number, number, number];
+}
+
+export interface BaseLayout {
+  structures: SavedStructure[];
+  lastUpdated: number;
 }
 
 export interface LeaderboardEntry {

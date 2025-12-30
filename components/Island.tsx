@@ -6,14 +6,30 @@ import { IslandTheme } from '../types';
 import { RealisticTree, RealisticRock, RealisticGrass, RealisticBush } from './RealisticEnvironment';
 
 const Island: React.FC = () => {
-  const islandTheme = useGameStore(s => s.islandTheme);
+  const { islandTheme, level } = useGameStore();
 
   const getColors = () => {
+    // Basic Biome Colors
+    let colors: { top: string; bottom: string; detail: string; secondary: string };
     switch (islandTheme) {
-      case IslandTheme.VOLCANO: return { top: '#1a0505', bottom: '#0a0202', detail: '#f97316', secondary: '#7c2d12' };
-      case IslandTheme.ARCTIC: return { top: '#f8fafc', bottom: '#1e293b', detail: '#cbd5e1', secondary: '#94a3b8' };
-      default: return { top: '#1a2e20', bottom: '#2a1a10', detail: '#3a5a40', secondary: '#4a3a2a' };
+      case IslandTheme.DESERT: colors = { top: '#eab308', bottom: '#713f12', detail: '#fde047', secondary: '#854d0e' }; break;
+      case IslandTheme.VOLCANO: colors = { top: '#1a0505', bottom: '#0a0202', detail: '#f97316', secondary: '#7c2d12' }; break;
+      case IslandTheme.ARCTIC: colors = { top: '#f8fafc', bottom: '#1e293b', detail: '#cbd5e1', secondary: '#94a3b8' }; break;
+      case IslandTheme.VOID: colors = { top: '#1e1b4b', bottom: '#020617', detail: '#a855f7', secondary: '#4c1d95' }; break;
+      case IslandTheme.CELESTIAL: colors = { top: '#083344', bottom: '#020617', detail: '#00f2ff', secondary: '#164e63' }; break;
+      case IslandTheme.CRYSTAL: colors = { top: '#4a044e', bottom: '#000000', detail: '#f0abfc', secondary: '#701a75' }; break;
+      case IslandTheme.CORRUPTION: colors = { top: '#1a2e05', bottom: '#020617', detail: '#84cc16', secondary: '#365314' }; break;
+      case IslandTheme.ABYSS: colors = { top: '#020617', bottom: '#000000', detail: '#4338ca', secondary: '#1e1b4b' }; break;
+      case IslandTheme.ETERNAL_SHADOW: colors = { top: '#000000', bottom: '#000000', detail: '#ffffff', secondary: '#334155' }; break;
+      default: colors = { top: '#1a2e20', bottom: '#2a1a10', detail: '#3a5a40', secondary: '#4a3a2a' };
     }
+
+    // Apply "Level Corruption" - Get darker/more purple as level increases
+    const corruptionScale = Math.min(0.8, level / 600);
+    const colorTop = new THREE.Color(colors.top).lerp(new THREE.Color('#0a0010'), corruptionScale).getStyle();
+    const colorBottom = new THREE.Color(colors.bottom).lerp(new THREE.Color('#000000'), corruptionScale).getStyle();
+
+    return { ...colors, top: colorTop, bottom: colorBottom };
   };
 
   const colors = getColors();

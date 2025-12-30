@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, Suspense, useMemo } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Float, Stars, Text, Sparkles, PerspectiveCamera, ContactShadows, useCursor } from '@react-three/drei';
+import * as THREE from 'three';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import DeeJayLabsLogo from './DeeJayLabsLogo';
 
 interface DailyReward {
     day: number;
-    type: 'wood' | 'stone' | 'lightShards' | 'food' | 'cosmetic' | 'special';
+    type: 'wood' | 'stone' | 'lightShards' | 'food' | 'cosmetic' | 'special' | 'shards' | 'energy';
     amount?: number;
     item?: string;
     icon: string;
@@ -19,11 +22,13 @@ interface DailyRewardStore {
     totalClaimed: number;
     rewards: DailyReward[];
     showRewardModal: boolean;
+    isRevealing: boolean;
 
     initializeRewards: () => void;
     canClaimToday: () => boolean;
     claimDailyReward: () => DailyReward | null;
     setShowRewardModal: (show: boolean) => void;
+    setRevealing: (val: boolean) => void;
     resetStreak: () => void;
 }
 
@@ -36,16 +41,17 @@ export const useDailyRewardStore = create<DailyRewardStore>()(
             totalClaimed: 0,
             rewards: [],
             showRewardModal: false,
+            isRevealing: false,
 
             initializeRewards: () => {
                 const rewards: DailyReward[] = [
-                    { day: 1, type: 'wood', amount: 100, icon: '🪵', claimed: false },
-                    { day: 2, type: 'stone', amount: 100, icon: '🪨', claimed: false },
-                    { day: 3, type: 'lightShards', amount: 50, icon: '✨', claimed: false },
-                    { day: 4, type: 'food', amount: 50, icon: '🍖', claimed: false },
-                    { day: 5, type: 'lightShards', amount: 100, icon: '💎', claimed: false },
-                    { day: 6, type: 'special', item: 'Weapon Upgrade', icon: '⚔️', claimed: false },
-                    { day: 7, type: 'cosmetic', item: 'Legendary Skin', icon: '👑', claimed: false }
+                    { day: 1, type: 'wood', amount: 150, icon: '🪵', claimed: false },
+                    { day: 2, type: 'stone', amount: 150, icon: '🪨', claimed: false },
+                    { day: 3, type: 'lightShards', amount: 80, icon: '✨', claimed: false },
+                    { day: 4, type: 'food', amount: 60, icon: '🍖', claimed: false },
+                    { day: 5, type: 'shards', amount: 120, icon: '💎', claimed: false },
+                    { day: 6, type: 'energy', amount: 100, icon: '⚡', claimed: false },
+                    { day: 7, type: 'special', item: 'Mythic Core', icon: '🌌', claimed: false }
                 ];
                 set({ rewards });
             },
@@ -53,24 +59,19 @@ export const useDailyRewardStore = create<DailyRewardStore>()(
             canClaimToday: () => {
                 const { lastClaimDate } = get();
                 if (!lastClaimDate) return true;
-
                 const today = new Date().toDateString();
                 return lastClaimDate !== today;
             },
 
             claimDailyReward: () => {
                 const { lastClaimDate, currentStreak, longestStreak, rewards, totalClaimed } = get();
-
                 if (!get().canClaimToday()) return null;
 
                 const today = new Date().toDateString();
                 const yesterday = new Date(Date.now() - 86400000).toDateString();
 
-                // Check if streak continues
                 const isConsecutive = lastClaimDate === yesterday;
                 const newStreak = isConsecutive ? currentStreak + 1 : 1;
-
-                // Get current day reward (cycles through 7 days)
                 const dayIndex = (newStreak - 1) % 7;
                 const reward = { ...rewards[dayIndex], claimed: true };
 
@@ -79,212 +80,223 @@ export const useDailyRewardStore = create<DailyRewardStore>()(
                     currentStreak: newStreak,
                     longestStreak: Math.max(longestStreak, newStreak),
                     totalClaimed: totalClaimed + 1,
-                    rewards: rewards.map((r, i) =>
-                        i === dayIndex ? { ...r, claimed: true } : r
-                    ),
-                    showRewardModal: true
+                    rewards: rewards.map((r, i) => i === dayIndex ? { ...r, claimed: true } : r),
                 });
 
                 return reward;
             },
 
             setShowRewardModal: (show: boolean) => set({ showRewardModal: show }),
-
+            setRevealing: (val: boolean) => set({ isRevealing: val }),
             resetStreak: () => set({ currentStreak: 0 })
         }),
-        {
-            name: 'nightflare-daily-rewards'
-        }
+        { name: 'nightflare-daily-rewards-v2' }
     )
 );
 
-// Daily Reward Modal Component
+// --- 3D MYSTERY BOX COMPONENT ---
+const PremiumGiftBox: React.FC<{ isOpen: boolean; onReveal: () => void; reward: DailyReward | null }> = ({ isOpen, onReveal, reward }) => {
+    const group = useRef<THREE.Group>(null);
+    const lid = useRef<THREE.Group>(null);
+    const [hovered, setHovered] = useState(false);
+    useCursor(hovered);
+
+    useFrame((state) => {
+        if (!group.current) return;
+        const t = state.clock.getElapsedTime();
+
+        if (isOpen) {
+            // Animation for opened state
+            lid.current!.rotation.x = THREE.MathUtils.lerp(lid.current!.rotation.x, -Math.PI * 0.7, 0.1);
+            lid.current!.position.y = THREE.MathUtils.lerp(lid.current!.position.y, 0.8, 0.1);
+            group.current.rotation.y += 0.01;
+        } else {
+            // Idle float and rotation
+            group.current.rotation.y = Math.sin(t * 0.5) * 0.2;
+            group.current.position.y = Math.sin(t * 2) * 0.1;
+
+            if (hovered) {
+                group.current.scale.lerp(new THREE.Vector3(1.1, 1.1, 1.1), 0.1);
+                group.current.rotation.z = Math.sin(t * 15) * 0.05; // Shake on hover
+            } else {
+                group.current.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
+                group.current.rotation.z = 0;
+            }
+        }
+    });
+
+    return (
+        <group ref={group} onPointerOver={() => setHovered(true)} onPointerOut={() => setHovered(false)}>
+            {/* Box Body */}
+            <mesh castShadow receiveShadow position={[0, -0.2, 0]}>
+                <boxGeometry args={[1, 0.8, 1]} />
+                <meshStandardMaterial color="#111" metalness={0.8} roughness={0.1} />
+            </mesh>
+
+            {/* Box Trim/Accents */}
+            <mesh position={[0, -0.2, 0]}>
+                <boxGeometry args={[1.02, 0.82, 1.02]} />
+                <meshStandardMaterial color="#00f2ff" transparent opacity={0.3} wireframe />
+            </mesh>
+
+            {/* Lid */}
+            <group ref={lid} position={[0, 0.3, 0]}>
+                <mesh castShadow position={[0, 0.1, 0]}>
+                    <boxGeometry args={[1.1, 0.2, 1.1]} />
+                    <meshStandardMaterial color="#1a1a1a" metalness={1} roughness={0.2} />
+                </mesh>
+                <mesh position={[0, 0.1, 0]}>
+                    <boxGeometry args={[1.12, 0.22, 1.12]} />
+                    <meshStandardMaterial color="#00f2ff" emissive="#00f2ff" emissiveIntensity={2} transparent opacity={0.4} wireframe />
+                </mesh>
+            </group>
+
+            {/* Glowing Core */}
+            <pointLight intensity={isOpen ? 10 : 2} color="#00f2ff" distance={5} />
+            {isOpen && (
+                <group position={[0, 0.5, 0]}>
+                    <Sparkles count={40} scale={2} size={6} speed={1.5} color="#00f2ff" />
+                    <Float speed={5} rotationIntensity={2} floatIntensity={2}>
+                        <Text
+                            position={[0, 0.5, 0]}
+                            fontSize={0.4}
+                            color="#fff"
+                            anchorX="center"
+                            anchorY="middle"
+                        >
+                            {reward?.icon || "?"}
+                        </Text>
+                    </Float>
+                </group>
+            )}
+        </group>
+    );
+};
+
+// --- MAIN MODAL COMPONENT ---
 export const DailyRewardModal: React.FC = () => {
     const {
-        rewards,
         currentStreak,
         longestStreak,
         canClaimToday,
         claimDailyReward,
         showRewardModal,
-        setShowRewardModal
+        setShowRewardModal,
+        isRevealing,
+        setRevealing
     } = useDailyRewardStore();
 
-    const [claimedReward, setClaimedReward] = useState<DailyReward | null>(null);
-    const [showCelebration, setShowCelebration] = useState(false);
+    const [reward, setReward] = useState<DailyReward | null>(null);
 
     const handleClaim = () => {
-        const reward = claimDailyReward();
-        if (reward) {
-            setClaimedReward(reward);
-            setShowCelebration(true);
+        if (!canClaimToday() || isRevealing) return;
+        setRevealing(true);
 
-            // Hide celebration after 3 seconds
-            setTimeout(() => {
-                setShowCelebration(false);
-            }, 3000);
-        }
+        // Delay reward logic to match animation
+        setTimeout(() => {
+            const r = claimDailyReward();
+            setReward(r);
+        }, 1200);
     };
 
     const handleClose = () => {
+        if (isRevealing && !reward) return; // Prevent closing during unboxing
         setShowRewardModal(false);
-        setClaimedReward(null);
-        setShowCelebration(false);
+        setReward(null);
+        setRevealing(false);
     };
 
     if (!showRewardModal) return null;
 
-    const currentDayIndex = (currentStreak % 7) || 7;
-
     return (
-        <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[9999] bg-[#050505]/95 backdrop-blur-2xl flex items-center justify-center p-4 overflow-hidden font-['Outfit']">
 
-            {/* Celebration Effect */}
-            {showCelebration && (
-                <div className="absolute inset-0 pointer-events-none">
-                    {[...Array(30)].map((_, i) => (
-                        <div
-                            key={i}
-                            className="absolute text-2xl animate-ping"
-                            style={{
-                                left: `${Math.random() * 100}%`,
-                                top: `${Math.random() * 100}%`,
-                                animationDelay: `${Math.random() * 0.5}s`,
-                                animationDuration: `${1 + Math.random()}s`
-                            }}
-                        >
-                            {['🎉', '✨', '🎊', '⭐', '💫'][Math.floor(Math.random() * 5)]}
-                        </div>
-                    ))}
-                </div>
-            )}
+            {/* Cinematic Background */}
+            <div className="absolute inset-0 z-0">
+                <Canvas shadows camera={{ position: [0, 2, 6], fov: 45 }}>
+                    <color attach="background" args={['#050505']} />
+                    <fog attach="fog" args={['#050505', 5, 15]} />
+                    <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
 
-            <div className="bg-gradient-to-br from-gray-900 via-black to-gray-900 rounded-3xl p-6 sm:p-8 max-w-2xl w-full border-2 border-white/10 shadow-2xl relative overflow-hidden">
+                    <ambientLight intensity={0.5} />
+                    <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
+                    <pointLight position={[-10, -10, -10]} color="red" intensity={1} />
 
-                {/* Background decoration */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-[100px]" />
-                <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-[100px]" />
+                    <Suspense fallback={null}>
+                        <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
+                            <PremiumGiftBox isOpen={!!reward} onReveal={() => { }} reward={reward} />
+                        </Float>
+                        <ContactShadows position={[0, -1.5, 0]} opacity={0.4} scale={10} blur={2.5} far={4} color="#000000" />
+                    </Suspense>
+                </Canvas>
+            </div>
 
-                {/* Close button */}
+            {/* UI LAYER */}
+            <div className="relative z-10 w-full max-w-lg flex flex-col items-center pointer-events-none">
+
+                {/* Close Button */}
                 <button
                     onClick={handleClose}
-                    className="absolute top-4 right-4 sm:top-6 sm:right-6 w-12 h-12 rounded-full bg-white/10 hover:bg-red-600 flex items-center justify-center text-white/70 hover:text-white transition-all z-50 border border-white/10 shadow-lg backdrop-blur-md active:scale-90"
-                    aria-label="Close"
+                    className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all pointer-events-auto"
                 >
-                    <span className="text-xl font-bold">✕</span>
+                    ✕
                 </button>
 
-                {/* Header */}
-                <div className="text-center mb-6 relative z-10">
-                    <div className="text-5xl mb-3 animate-bounce">🎁</div>
-                    <h2 className="text-3xl sm:text-4xl font-black text-white italic uppercase tracking-tighter mb-2">
-                        Daily Rewards
+                {/* Info Display */}
+                <div className={`text-center transition-all duration-700 ${isRevealing ? 'opacity-0 -translate-y-8' : 'opacity-100'}`}>
+                    <div className="text-cyan-400 text-xs font-black tracking-[0.5em] uppercase mb-2">SUPPLY DROP DETECTED</div>
+                    <h2 className="text-5xl sm:text-6xl font-black text-white italic tracking-tighter uppercase mb-4 drop-shadow-[0_0_20px_rgba(0,242,255,0.4)]">
+                        Daily Bounty
                     </h2>
-                    <p className="text-white/60 text-sm uppercase tracking-wider font-bold">
-                        Login every day for amazing rewards!
-                    </p>
-                </div>
-
-                {/* Streak Info */}
-                <div className="flex justify-center gap-4 mb-6 relative z-10">
-                    <div className="bg-white/5 rounded-xl px-4 py-2 border border-white/10">
-                        <div className="text-white/50 text-xs uppercase font-bold mb-1">Current Streak</div>
-                        <div className="text-orange-500 text-2xl font-black text-center">{currentStreak} 🔥</div>
-                    </div>
-                    <div className="bg-white/5 rounded-xl px-4 py-2 border border-white/10">
-                        <div className="text-white/50 text-xs uppercase font-bold mb-1">Best Streak</div>
-                        <div className="text-purple-500 text-2xl font-black text-center">{longestStreak} ⭐</div>
+                    <div className="flex gap-4 justify-center">
+                        <div className="bg-white/5 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
+                            <span className="text-[10px] block text-white/40 font-black uppercase tracking-widest">Streak</span>
+                            <span className="text-xl font-black text-orange-400">{currentStreak} DAYS</span>
+                        </div>
+                        <div className="bg-white/5 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
+                            <span className="text-[10px] block text-white/40 font-black uppercase tracking-widest">Best</span>
+                            <span className="text-xl font-black text-cyan-400">{longestStreak} DAYS</span>
+                        </div>
                     </div>
                 </div>
 
-                {/* Rewards Grid */}
-                <div className="grid grid-cols-7 gap-2 sm:gap-3 mb-6 relative z-10">
-                    {rewards.map((reward, index) => {
-                        const isToday = index + 1 === currentDayIndex;
-                        const isClaimed = reward.claimed;
-                        const isAvailable = canClaimToday() && isToday;
+                {/* Reward Reveal Display */}
+                <div className={`mt-24 text-center transition-all duration-1000 ${reward ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+                    <div className="text-white/40 text-xs font-black tracking-[0.4em] uppercase mb-2 animate-pulse">PRIZE SECURED</div>
+                    <div className="text-4xl sm:text-6xl font-black text-white italic tracking-tighter mb-4">
+                        {reward?.amount && `+${reward.amount}`} {reward?.item || reward?.type.toUpperCase()}
+                    </div>
+                    <button
+                        onClick={handleClose}
+                        className="pointer-events-auto px-8 py-3 bg-white text-black font-black uppercase tracking-widest rounded-full hover:scale-110 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,255,255,0.5)]"
+                    >
+                        COLLECT ALL
+                    </button>
+                </div>
 
-                        return (
-                            <div
-                                key={reward.day}
-                                className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-center p-2 transition-all relative ${isToday && !isClaimed
-                                    ? 'bg-gradient-to-br from-orange-600 to-red-600 border-yellow-400 shadow-[0_0_30px_rgba(251,146,60,0.6)] scale-110 animate-pulse'
-                                    : isClaimed
-                                        ? 'bg-green-900/30 border-green-500/30'
-                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                    }`}
+                {/* Claim Trigger */}
+                {!reward && (
+                    <div className={`mt-32 w-full transition-all duration-500 ${isRevealing ? 'opacity-0 translate-y-20' : 'opacity-100'}`}>
+                        {canClaimToday() ? (
+                            <button
+                                onClick={handleClaim}
+                                className="pointer-events-auto w-full group relative bg-cyan-400 text-black py-6 rounded-[2rem] font-black text-2xl hover:scale-[1.05] active:scale-95 transition-all shadow-[0_15px_60px_rgba(0,242,255,0.4)] overflow-hidden italic tracking-tighter"
                             >
-                                {/* Day number */}
-                                <div className={`text-[10px] font-black uppercase mb-1 ${isToday ? 'text-yellow-300' : isClaimed ? 'text-green-400' : 'text-white/50'
-                                    }`}>
-                                    Day {reward.day}
-                                </div>
-
-                                {/* Icon */}
-                                <div className={`text-2xl sm:text-3xl mb-1 ${isClaimed ? 'grayscale opacity-50' : ''}`}>
-                                    {reward.icon}
-                                </div>
-
-                                {/* Amount/Item */}
-                                <div className={`text-[9px] sm:text-[10px] font-bold text-center leading-tight ${isToday ? 'text-white' : isClaimed ? 'text-green-400' : 'text-white/70'
-                                    }`}>
-                                    {reward.amount ? `${reward.amount}` : reward.item}
-                                </div>
-
-                                {/* Claimed checkmark */}
-                                {isClaimed && (
-                                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-xs">
-                                        ✓
-                                    </div>
-                                )}
-
-                                {/* Today indicator */}
-                                {isToday && !isClaimed && (
-                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-yellow-400 text-black text-[8px] font-black px-2 py-0.5 rounded-full uppercase">
-                                        Today
-                                    </div>
-                                )}
+                                <div className="absolute inset-0 bg-white translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
+                                <span className="relative z-10 flex items-center justify-center gap-4">
+                                    OPEN MYSTERY BOX <span className="opacity-40">➔</span>
+                                </span>
+                            </button>
+                        ) : (
+                            <div className="w-full py-6 bg-white/5 rounded-[2rem] border border-white/10 text-center text-white/30 font-black uppercase tracking-[0.2em]">
+                                VAULT LOCKED • RETURN TOMORROW
                             </div>
-                        );
-                    })}
-                </div>
-
-                {/* Claim Button or Status */}
-                <div className="relative z-10">
-                    {canClaimToday() ? (
-                        <button
-                            onClick={handleClaim}
-                            className="w-full py-4 bg-gradient-to-r from-orange-600 to-red-600 rounded-xl text-white font-black text-xl uppercase tracking-tight hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_30px_rgba(251,146,60,0.4)] relative overflow-hidden group"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                            <span className="relative z-10">🎁 Claim Today's Reward</span>
-                        </button>
-                    ) : (
-                        <div className="w-full py-4 bg-white/5 rounded-xl text-white/50 font-bold text-center border border-white/10">
-                            ✓ Come back tomorrow for your next reward!
-                        </div>
-                    )}
-                </div>
-
-                {/* Claimed Reward Display */}
-                {claimedReward && showCelebration && (
-                    <div className="mt-4 bg-gradient-to-r from-green-900/50 to-emerald-900/50 rounded-xl p-4 border-2 border-green-500/50 animate-in zoom-in duration-300 relative z-10">
-                        <div className="flex items-center gap-3">
-                            <div className="text-4xl">{claimedReward.icon}</div>
-                            <div className="flex-1">
-                                <div className="text-green-400 text-xs uppercase font-black mb-1">Reward Claimed!</div>
-                                <div className="text-white font-bold">
-                                    {claimedReward.amount && `+${claimedReward.amount} ${claimedReward.type}`}
-                                    {claimedReward.item && claimedReward.item}
-                                </div>
-                            </div>
-                            <div className="text-3xl animate-bounce">🎉</div>
-                        </div>
+                        )}
                     </div>
                 )}
 
-                {/* Footer */}
-                <div className="mt-6 flex justify-center opacity-30 relative z-10 scale-75">
+                {/* Footer Branding */}
+                <div className="absolute -bottom-16 opacity-20 scale-75">
                     <DeeJayLabsLogo />
                 </div>
             </div>
@@ -292,4 +304,4 @@ export const DailyRewardModal: React.FC = () => {
     );
 };
 
-export default useDailyRewardStore;
+export default DailyRewardStore;

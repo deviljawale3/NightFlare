@@ -13,19 +13,32 @@ const ResourceNodes: React.FC = () => {
   useEffect(() => {
     const newNodes: ResourceNode[] = [];
     const types: ResourceNode['type'][] = ['TREE', 'ROCK', 'CRYSTAL', 'FOOD'];
-    const count = 45; // Reduced from 75 for performance
+    const count = 35; // Fine-tuned for spatial balance
 
     for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 5 + Math.random() * 16;
-      const type = types[Math.floor(Math.random() * types.length)];
+      let attempts = 0;
+      while (attempts < 5) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 6 + Math.random() * 16;
+        const pos: [number, number, number] = [Math.cos(angle) * radius, 0, Math.sin(angle) * radius];
 
-      newNodes.push({
-        id: `node-${level}-${wave}-${i}-${Math.random()}`,
-        type,
-        position: [Math.cos(angle) * radius, 0, Math.sin(angle) * radius],
-        health: 1
-      });
+        const tooClose = newNodes.some(n => {
+          const dx = n.position[0] - pos[0];
+          const dz = n.position[2] - pos[2];
+          return (dx * dx + dz * dz) < 10; // ~3.16 unit distance
+        });
+
+        if (!tooClose || attempts === 4) {
+          newNodes.push({
+            id: `node-${level}-${wave}-${i}-${Math.random()}`,
+            type: types[Math.floor(Math.random() * types.length)],
+            position: pos,
+            health: 1
+          });
+          break;
+        }
+        attempts++;
+      }
     }
     setNodes(newNodes);
   }, [level, wave, setNodes]);
@@ -79,15 +92,19 @@ const ResourceNodes: React.FC = () => {
 
       const currentNodes = useGameStore.getState().nodes;
       currentNodes.forEach(node => {
-        const nodePos = new THREE.Vector3(...node.position);
-        if (nodePos.distanceTo(hitPos) < range) {
+        const nodePosition = new THREE.Vector3(...node.position);
+        if (nodePosition.distanceTo(hitPos) < range) {
           handleHarvest(node.id, node.type, node.position);
         }
       });
     };
 
     window.addEventListener('player-attack-hitbox', handleHarvestEvent);
-    return () => window.removeEventListener('player-attack-hitbox', handleHarvestEvent);
+    window.addEventListener('player-interact-check', handleHarvestEvent);
+    return () => {
+      window.removeEventListener('player-attack-hitbox', handleHarvestEvent);
+      window.removeEventListener('player-interact-check', handleHarvestEvent);
+    };
   }, [gameState]);
 
   const handleHarvest = (id: string, type: ResourceNode['type'], pos: [number, number, number]) => {
@@ -178,25 +195,24 @@ const NodeItem = React.forwardRef<THREE.Group, { data: ResourceNode; onHarvest: 
         <group position={[0, 1.5, 0]} scale={2.2}>
           <mesh castShadow>
             <octahedronGeometry args={[0.65]} />
-            <meshStandardMaterial color="#00e5ff" emissive="#00b0ff" emissiveIntensity={40} flatShading />
+            <meshStandardMaterial color="#00e5ff" emissive="#00b0ff" emissiveIntensity={3} flatShading />
           </mesh>
-          <mesh position={[0, 0, 0]} scale={0.8} rotation={[Math.PI / 4, 0, Math.PI / 4]}>
+          <mesh scale={0.8} rotation={[Math.PI / 4, 0, Math.PI / 4]}>
             <octahedronGeometry args={[0.65]} />
-            <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={80} transparent opacity={0.4} />
+            <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={6} transparent opacity={0.4} />
           </mesh>
         </group>
       )}
 
       {data.type === 'FOOD' && (
         <group scale={2.2} position={[0, 1.0, 0]}>
-          {/* Polished Food Bio-Cube */}
           <mesh castShadow>
             <boxGeometry args={[0.6, 0.6, 0.6]} />
-            <meshStandardMaterial color="#ff5252" emissive="#ff1744" emissiveIntensity={10} flatShading />
+            <meshStandardMaterial color="#ff5252" emissive="#ff1744" emissiveIntensity={2} flatShading />
           </mesh>
           <mesh scale={0.65} rotation={[Math.PI / 2, 0, Math.PI / 4]}>
             <boxGeometry args={[0.8, 0.8, 0.8]} />
-            <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={60} transparent opacity={0.5} />
+            <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={5} transparent opacity={0.5} />
           </mesh>
         </group>
       )}

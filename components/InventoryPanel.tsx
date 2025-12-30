@@ -4,7 +4,7 @@ import { useGameStore } from '../store';
 import DeeJayLabsLogo from './DeeJayLabsLogo';
 
 const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { resources, playerStats, score, wave } = useGameStore();
+  const { resources, playerStats, score, wave, transmute } = useGameStore();
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-md z-[70] pointer-events-auto p-4 animate-in fade-in duration-300 safe-padding" onClick={onClose}>
@@ -18,7 +18,7 @@ const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <div className="flex justify-between items-start mb-6 shrink-0 relative z-10">
           <div>
             <h2 className="text-2xl md:text-3xl font-black text-white italic tracking-tighter uppercase">Inventory</h2>
-            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mt-0.5">Tactical Storage</p>
+            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mt-0.5">Gear Hub</p>
           </div>
           <button
             onClick={onClose}
@@ -32,7 +32,7 @@ const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 relative z-10 space-y-8">
 
           <div className="space-y-3">
-            <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2">Resources collected</h3>
+            <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2">Loot Bag</h3>
             <div className="grid grid-cols-2 gap-3">
               <ResourceItem label="Lumber" value={resources.wood} icon="🪵" color="text-amber-500" />
               <ResourceItem label="Granite" value={resources.stone} icon="🪨" color="text-slate-400" />
@@ -42,7 +42,29 @@ const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2">Survivor Status</h3>
+            <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2">Alchemical Transmutation</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => transmute('wood', 100)}
+                disabled={resources.wood < 100}
+                className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-3 flex flex-col items-center justify-center text-center hover:bg-cyan-500/20 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale"
+              >
+                <span className="text-xl">🪵➡️✨</span>
+                <span className="text-[10px] font-bold text-cyan-400 uppercase mt-1">Lumber to Shards (100)</span>
+              </button>
+              <button
+                onClick={() => transmute('stone', 100)}
+                disabled={resources.stone < 100}
+                className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-3 flex flex-col items-center justify-center text-center hover:bg-cyan-500/20 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale"
+              >
+                <span className="text-xl">🪨➡️✨</span>
+                <span className="text-[10px] font-bold text-cyan-400 uppercase mt-1">Granite to Shards (100)</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-2">Operative Status</h3>
             <div className="bg-white/5 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
               <StatItem label="Health Condition" value={`${Math.ceil(playerStats.currentHealth)}%`} color="text-green-400" />
               <StatItem label="Attack Power" value={playerStats.attackDamage} />
@@ -56,7 +78,7 @@ const InventoryPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
         <div className="mt-6 pt-4 border-t border-white/10 flex justify-between items-center shrink-0 relative z-10">
           <div className="flex flex-col">
-            <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">Session Score</span>
+            <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">Battle Record</span>
             <span className="text-xl font-black text-white tabular-nums tracking-tight">{score.toLocaleString()}</span>
           </div>
 

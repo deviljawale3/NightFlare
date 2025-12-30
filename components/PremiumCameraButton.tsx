@@ -18,14 +18,14 @@ const PremiumCameraButton: React.FC<PremiumCameraButtonProps> = ({ onToggle, isA
         <div className="fixed top-20 right-6 z-50 pointer-events-auto md:hidden">
             {/* Camera Button */}
             <button
-                className={`w-14 h-14 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-200 relative overflow-hidden group ${isPressed ? 'scale-90' : 'scale-100'
-                    } ${isActive ? 'bg-cyan-500/20 border-cyan-400/40' : 'hover:bg-white/20'
+                className={`w-14 h-14 rounded-full bg-white/5 backdrop-blur-2xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-all duration-200 relative overflow-hidden group ${isPressed ? 'scale-90' : 'scale-100'
+                    } ${isActive ? 'bg-cyan-500/30 border-cyan-400/50 shadow-[0_0_20px_rgba(34,211,238,0.3)]' : 'hover:bg-white/10 hover:border-white/30'
                     }`}
                 onClick={handlePress}
                 style={{
                     boxShadow: isActive
-                        ? '0 8px 32px rgba(0,0,0,0.3), 0 0 20px rgba(34,211,238,0.4)'
-                        : '0 8px 32px rgba(0,0,0,0.3)'
+                        ? '0 0 25px rgba(34,211,238,0.3), inset 0 0 10px rgba(34,211,238,0.2)'
+                        : '0 8px 32px rgba(0,0,0,0.5)'
                 }}
             >
                 {/* Glow Effect */}

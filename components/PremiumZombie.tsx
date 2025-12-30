@@ -15,11 +15,28 @@ interface ZombieProps {
     isAttacking?: boolean;
     isDying?: boolean;
     isStunned?: boolean;
+    hitTime?: number;
 }
 
-export const PremiumZombie: React.FC<ZombieProps> = (props) => {
+export const PremiumZombie: React.FC<ZombieProps> = ({
+    type,
+    position,
+    seed,
+    isAttacking = false,
+    isDying = false,
+    isStunned = false,
+    hitTime
+}) => {
     // Simply pass through to RealisticEnemy
-    return <RealisticEnemy {...props} />;
+    return <RealisticEnemy
+        type={type}
+        position={position}
+        seed={seed}
+        isAttacking={isAttacking}
+        isDying={isDying}
+        isStunned={isStunned}
+        hitTime={hitTime}
+    />;
 };
 
 export default PremiumZombie;

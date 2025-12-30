@@ -279,11 +279,11 @@ const SocialShare: React.FC<SocialShareProps> = ({ onClose, stats }) => {
 
                 {/* FOOTER ACTIONS */}
                 {mode !== 'LIVE' && (
-                    <div className="grid grid-cols-4 gap-3 w-full mb-6 relative z-10">
+                    <div className="grid grid-cols-4 gap-4 w-full mb-6 relative z-10">
                         <SocialButton icon="𝕏" color="bg-black border border-white/20" onClick={() => handleShare('twitter')} />
                         <SocialButton icon="fb" color="bg-[#1877F2]" onClick={() => handleShare('facebook')} />
                         <SocialButton icon="wz" color="bg-[#25D366]" onClick={() => handleShare('whatsapp')} />
-                        <SocialButton icon="⬇" color="bg-orange-600 shadow-[0_0_15px_rgba(234,88,12,0.4)]" onClick={handleDownload} />
+                        <SocialButton icon="⬇" color="bg-orange-600 shadow-[0_0_20px_rgba(234,88,12,0.4)]" onClick={handleDownload} />
                     </div>
                 )}
 
